@@ -1,0 +1,1 @@
+ALTER TABLE "books" ADD COLUMN "is_physical" boolean DEFAULT false NOT NULL;
