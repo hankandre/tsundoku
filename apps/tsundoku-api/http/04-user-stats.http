@@ -1,0 +1,87 @@
+### 
+
+@baseUrl = http://localhost:6060
+
+
+### 
+
+
+### 
+
+GET {{baseUrl}}/api/v1/user-stats/reading/heatmap?year=2024 HTTP/1.1
+Authorization: Bearer {{ACCESS_TOKEN}}
+
+
+### 
+
+# Get reading dates
+
+GET {{baseUrl}}/api/v1/user-stats/reading/dates HTTP/1.1
+Authorization: Bearer {{ACCESS_TOKEN}}
+
+
+### 
+
+# Get reading streak
+
+GET {{baseUrl}}/api/v1/user-stats/reading/streak HTTP/1.1
+Authorization: Bearer {{ACCESS_TOKEN}}
+
+
+### 
+
+# Get peak reading hours
+
+GET {{baseUrl}}/api/v1/user-stats/reading/peak-hours HTTP/1.1
+Authorization: Bearer {{ACCESS_TOKEN}}
+
+
+### 
+
+# Get genre statistics
+
+GET {{baseUrl}}/api/v1/user-stats/reading/genres HTTP/1.1
+Authorization: Bearer {{ACCESS_TOKEN}}
+
+
+### 
+
+# Get book distributions
+
+GET {{baseUrl}}/api/v1/user-stats/reading/book-distributions HTTP/1.1
+Authorization: Bearer {{ACCESS_TOKEN}}
+
+
+### 
+
+# Get session scatter
+
+GET {{baseUrl}}/api/v1/user-stats/reading/session-scatter?year=2024 HTTP/1.1
+Authorization: Bearer {{ACCESS_TOKEN}}
+
+
+### 
+
+# Get book timeline
+
+GET {{baseUrl}}/api/v1/user-stats/reading/book-timeline?year=2024 HTTP/1.1
+Authorization: Bearer {{ACCESS_TOKEN}}
+
+
+### 
+
+# Get listening weekly trend
+
+GET {{baseUrl}}/api/v1/user-stats/listening/weekly-trend HTTP/1.1
+Authorization: Bearer {{ACCESS_TOKEN}}
+
+
+### 
+
+# Get listening completion
+
+
+### 
+
+GET {{baseUrl}}/api/v1/user-stats/listening/completion HTTP/1.1
+Authorization: Bearer {{ACCESS_TOKEN}}

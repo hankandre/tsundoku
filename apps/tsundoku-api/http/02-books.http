@@ -1,0 +1,74 @@
+### 
+
+@baseUrl = http://localhost:6060
+
+
+### 
+
+# Get all books
+
+GET {{baseUrl}}/api/v1/books HTTP/1.1
+Authorization: Bearer {{ACCESS_TOKEN}}
+
+
+### 
+
+# Get book by ID
+
+GET {{baseUrl}}/api/v1/books/{{bookId}} HTTP/1.1
+Authorization: Bearer {{ACCESS_TOKEN}}
+
+
+### 
+
+# Get books by IDs (batch)
+
+POST {{baseUrl}}/api/v1/books/batch HTTP/1.1
+Authorization: Bearer {{ACCESS_TOKEN}}
+Content-Type: application/json
+
+{
+  "ids": [
+    "{{bookId}}"
+  ]
+}
+
+
+### 
+
+# Get book metadata
+
+GET {{baseUrl}}/api/v1/books/{{bookId}}/metadata HTTP/1.1
+Authorization: Bearer {{ACCESS_TOKEN}}
+
+
+### 
+
+# Update book metadata
+
+PUT {{baseUrl}}/api/v1/books/{{bookId}}/metadata HTTP/1.1
+Authorization: Bearer {{ACCESS_TOKEN}}
+Content-Type: application/json
+
+{
+  "description": "Updated description",
+  "title": "Updated Title"
+}
+
+
+### 
+
+# Bulk update metadata
+
+POST {{baseUrl}}/api/v1/books/metadata/bulk-edit HTTP/1.1
+Authorization: Bearer {{ACCESS_TOKEN}}
+Content-Type: application/json
+
+{
+  "bookIds": [
+    "{{bookId}}"
+  ],
+  "updates": {
+    "title": "Bulk Title"
+  }
+}

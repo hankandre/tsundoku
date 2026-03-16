@@ -1,0 +1,53 @@
+### 
+
+@baseUrl = http://localhost:6060
+
+
+### Get all libraries
+
+GET {{baseUrl}}/api/v1/libraries HTTP/1.1
+Authorization: Bearer {{ACCESS_TOKEN}}
+
+
+### 
+
+# Create library
+
+POST {{baseUrl}}/api/v1/libraries HTTP/1.1
+Authorization: Bearer {{ACCESS_TOKEN}}
+Content-Type: application/json
+
+{
+  "name": "My Library",
+  "rootFolder": "/books",
+  "type": "LOCAL"
+}
+
+
+### 
+
+# Get library by ID
+
+GET {{baseUrl}}/api/v1/libraries/{{libraryId}} HTTP/1.1
+Authorization: Bearer {{ACCESS_TOKEN}}
+
+
+### 
+
+# Update library
+
+PUT {{baseUrl}}/api/v1/libraries/{{libraryId}} HTTP/1.1
+Authorization: Bearer {{ACCESS_TOKEN}}
+Content-Type: application/json
+
+{
+  "name": "Updated Library"
+}
+
+
+### 
+
+# Delete library
+
+DELETE {{baseUrl}}/api/v1/libraries/{{libraryId}} HTTP/1.1
+Authorization: Bearer {{ACCESS_TOKEN}}

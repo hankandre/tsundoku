@@ -1,0 +1,89 @@
+### 
+
+@baseUrl = http://localhost:6060
+
+
+### 
+
+@token = Get all shelves
+
+
+### 
+
+GET {{baseUrl}}/api/v1/shelves HTTP/1.1
+Authorization: Bearer {{ACCESS_TOKEN}}
+
+
+### 
+
+# Create shelf
+
+POST {{baseUrl}}/api/v1/shelves HTTP/1.1
+Authorization: Bearer {{ACCESS_TOKEN}}
+Content-Type: application/json
+
+{
+  "name": "My Shelf",
+  "normalizedName": "my-shelf"
+}
+
+
+### 
+
+# Get shelf by ID
+
+GET {{baseUrl}}/api/v1/shelves/{{shelfId}} HTTP/1.1
+Authorization: Bearer {{ACCESS_TOKEN}}
+
+
+### 
+
+# Update shelf
+
+PUT {{baseUrl}}/api/v1/shelves/{{shelfId}} HTTP/1.1
+Authorization: Bearer {{ACCESS_TOKEN}}
+Content-Type: application/json
+
+{
+  "name": "Updated Shelf"
+}
+
+
+### 
+
+# Delete shelf
+
+DELETE {{baseUrl}}/api/v1/shelves/{{shelfId}} HTTP/1.1
+Authorization: Bearer {{ACCESS_TOKEN}}
+
+
+### 
+
+# Get books on shelf
+
+GET {{baseUrl}}/api/v1/shelves/{{shelfId}}/books HTTP/1.1
+Authorization: Bearer {{ACCESS_TOKEN}}
+
+
+### 
+
+# Add book to shelf
+
+POST {{baseUrl}}/api/v1/shelves/{{shelfId}}/books HTTP/1.1
+Authorization: Bearer {{ACCESS_TOKEN}}
+Content-Type: application/json
+
+{
+  "bookId": "{{bookId}}"
+}
+
+
+### 
+
+# Remove book from shelf
+
+
+### 
+
+DELETE {{baseUrl}}/api/v1/shelves/{{shelfId}}/books/{{bookId}} HTTP/1.1
+Authorization: Bearer {{ACCESS_TOKEN}}

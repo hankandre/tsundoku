@@ -1,0 +1,44 @@
+@baseUrl = http://localhost:6060
+@token = 
+
+###
+# Get all magic shelves
+GET {{baseUrl}}/api/magic-shelves
+Authorization: Bearer {{token}}
+
+###
+# Create magic shelf
+POST {{baseUrl}}/api/magic-shelves
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "name": "Recently Read",
+  "icon": "clock",
+  "filterJson": "{\"field\": \"lastRead\", \"op\": \"withinDays\", \"value\": 7}"
+}
+
+###
+# Get magic shelf by ID
+GET {{baseUrl}}/api/magic-shelves/{{magicShelfId}}
+Authorization: Bearer {{token}}
+
+###
+# Update magic shelf
+PUT {{baseUrl}}/api/magic-shelves/{{magicShelfId}}
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "name": "Updated Shelf"
+}
+
+###
+# Delete magic shelf
+DELETE {{baseUrl}}/api/magic-shelves/{{magicShelfId}}
+Authorization: Bearer {{token}}
+
+###
+# Get books on magic shelf
+GET {{baseUrl}}/api/magic-shelves/{{magicShelfId}}/books
+Authorization: Bearer {{token}}

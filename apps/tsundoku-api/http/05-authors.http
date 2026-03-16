@@ -1,0 +1,85 @@
+### 
+
+@baseUrl = http://localhost:6060
+
+
+### 
+
+@token = Get all authors
+
+
+### 
+
+GET {{baseUrl}}/api/v1/authors HTTP/1.1
+Authorization: Bearer {{ACCESS_TOKEN}}
+
+
+### 
+
+# Get author by name
+
+GET {{baseUrl}}/api/v1/authors/by-name?name=Author%20Name HTTP/1.1
+Authorization: Bearer {{ACCESS_TOKEN}}
+
+
+### 
+
+# Get authors by book ID
+
+GET {{baseUrl}}/api/v1/authors/book/{{bookId}} HTTP/1.1
+Authorization: Bearer {{ACCESS_TOKEN}}
+
+
+### 
+
+# Get author by ID
+
+GET {{baseUrl}}/api/v1/authors/{{authorId}} HTTP/1.1
+Authorization: Bearer {{ACCESS_TOKEN}}
+
+
+### 
+
+# Update author
+
+PUT {{baseUrl}}/api/v1/authors/{{authorId}} HTTP/1.1
+Authorization: Bearer {{ACCESS_TOKEN}}
+Content-Type: application/json
+
+{
+  "name": "Updated Author Name"
+}
+
+
+### 
+
+# Search author metadata
+
+POST {{baseUrl}}/api/v1/authors/{{authorId}}/search-metadata?q=Author%20Name HTTP/1.1
+Authorization: Bearer {{ACCESS_TOKEN}}
+
+
+### 
+
+# Quick match author
+
+POST {{baseUrl}}/api/v1/authors/{{authorId}}/quick-match HTTP/1.1
+Authorization: Bearer {{ACCESS_TOKEN}}
+
+
+### 
+
+# Delete authors
+
+
+### 
+
+DELETE {{baseUrl}}/api/v1/authors HTTP/1.1
+Authorization: Bearer {{ACCESS_TOKEN}}
+Content-Type: application/json
+
+{
+  "authorIds": [
+    "{{authorId}}"
+  ]
+}

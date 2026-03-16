@@ -1,0 +1,44 @@
+@baseUrl = http://localhost:6060
+@token = 
+
+###
+# Get all tasks
+GET {{baseUrl}}/api/v1/tasks
+Authorization: Bearer {{token}}
+
+###
+# Get tasks by type
+GET {{baseUrl}}/api/v1/tasks/METADATA_AUTO
+Authorization: Bearer {{token}}
+
+###
+# Start task
+POST {{baseUrl}}/api/v1/tasks/start
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "type": "SCAN_LIBRARY",
+  "libraryId": "{{libraryId}}"
+}
+
+###
+# Cancel task
+DELETE {{baseUrl}}/api/v1/tasks/{{taskId}}/cancel
+Authorization: Bearer {{token}}
+
+###
+# Get last tasks
+GET {{baseUrl}}/api/v1/tasks/last
+Authorization: Bearer {{token}}
+
+###
+# Update task cron
+PATCH {{baseUrl}}/api/v1/tasks/METADATA_AUTO/cron
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "cronExpression": "0 0 * * *",
+  "enabled": true
+}

@@ -1,0 +1,55 @@
+@baseUrl = http://localhost:6060
+@token = 
+
+###
+# Get all users (admin only)
+GET {{baseUrl}}/api/v1/users
+Authorization: Bearer {{token}}
+
+###
+# Get user by ID
+GET {{baseUrl}}/api/v1/users/{{userId}}
+Authorization: Bearer {{token}}
+
+###
+# Get current user
+GET {{baseUrl}}/api/v1/users/me
+Authorization: Bearer {{token}}
+
+###
+# Update user
+PUT {{baseUrl}}/api/v1/users/{{userId}}
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "name": "Updated Name",
+  "email": "updated@example.com"
+}
+
+###
+# Update user permissions (admin only)
+PUT {{baseUrl}}/api/v1/users/{{userId}}/permissions
+Authorization: {{token}}
+Content-Type: application/json
+
+{
+  "permissionManipulateLibrary": true,
+  "permissionEditMetadata": true
+}
+
+###
+# Change password
+POST {{baseUrl}}/api/v1/users/{{userId}}/change-password
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "currentPassword": "oldpassword",
+  "newPassword": "newpassword"
+}
+
+###
+# Delete user (admin only)
+DELETE {{baseUrl}}/api/v1/users/{{userId}}
+Authorization: Bearer {{token}}

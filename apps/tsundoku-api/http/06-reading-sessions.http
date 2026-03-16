@@ -1,0 +1,26 @@
+@baseUrl = http://localhost:6060
+@token = 
+
+###
+# Get reading sessions for book
+GET {{baseUrl}}/api/v1/reading-sessions/book/{{bookId}}
+Authorization: Bearer {{token}}
+
+###
+# Create reading session
+POST {{baseUrl}}/api/v1/reading-sessions
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "bookId": "{{bookId}}",
+  "bookType": "EBOOK",
+  "startTime": "2024-01-15T10:00:00Z",
+  "endTime": "2024-01-15T10:30:00Z",
+  "durationSeconds": 1800,
+  "startProgress": 100,
+  "endProgress": 150,
+  "progressDelta": 50,
+  "startLocation": "page:10",
+  "endLocation": "page:15"
+}

@@ -1,0 +1,33 @@
+@baseUrl = http://localhost:6060
+@token = 
+
+###
+# Get KOReader user
+GET {{baseUrl}}/api/v1/koreader-users/me
+Authorization: Bearer {{token}}
+
+###
+# Update KOReader user
+PUT {{baseUrl}}/api/v1/koreader-users/me
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "deviceId": "my-kobo",
+  "deviceName": "My Kobo"
+}
+
+###
+# Sync KOReader progress
+PATCH {{baseUrl}}/api/v1/koreader-users/me/sync
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "lastReadTimestamp": "2024-01-15T10:00:00Z"
+}
+
+###
+# Get folders at path (admin or canManageLibrary)
+GET {{baseUrl}}/api/v1/path?path=/books
+Authorization: Bearer {{token}}

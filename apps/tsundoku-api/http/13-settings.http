@@ -1,0 +1,31 @@
+@baseUrl = http://localhost:6060
+@token = 
+
+###
+# Get app settings
+GET {{baseUrl}}/api/v1/settings
+Authorization: Bearer {{token}}
+
+###
+# Update app setting
+PUT {{baseUrl}}/api/v1/settings/theme
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "value": "dark"
+}
+
+###
+# Get public settings
+GET {{baseUrl}}/api/v1/public-settings
+
+###
+# Update public setting
+PUT {{baseUrl}}/api/v1/public-settings/libraryName
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "value": "My Library"
+}

@@ -1,0 +1,62 @@
+@baseUrl = http://localhost:6060
+@username = admin
+@password = admin123
+
+
+### Login
+
+POST {{baseUrl}}/api/v1/auth/login HTTP/1.1
+Content-Type: application/json
+
+{
+  "username": "{{username}}",
+  "password": "{{password}}"
+}
+
+> {%
+  -- lua
+  client.global.ACCESS_TOKEN = response.json.accessToken
+%}
+
+
+### Get user content restrictions
+
+GET {{baseUrl}}/api/v1/users/{{userId}}/content-restrictions HTTP/1.1
+Authorization: Bearer {{ACCESS_TOKEN}}
+
+
+### Add content restriction (admin)
+
+POST {{baseUrl}}/api/v1/users/{{userId}}/content-restrictions HTTP/1.1
+Authorization: Bearer {{ACCESS_TOKEN}}
+Content-Type: application/json
+
+{
+  "restrictionType": "RATING",
+  "mode": "BLOCK",
+  "value": "18"
+}
+
+
+### Update all content restrictions (admin)
+
+PUT {{baseUrl}}/api/v1/users/{{userId}}/content-restrictions HTTP/1.1
+Authorization: Bearer {{ACCESS_TOKEN}}
+Content-Type: application/json
+
+[
+  { "restrictionType": "RATING", "mode": "BLOCK", "value": "18" },
+  { "restrictionType": "GENRE", "mode": "WARN", "value": "horror" }
+]
+
+
+### Delete content restriction (admin)
+
+DELETE {{baseUrl}}/api/v1/users/{{userId}}/content-restrictions/{{restrictionId}} HTTP/1.1
+Authorization: Bearer {{ACCESS_TOKEN}}
+
+
+### Delete all user content restrictions (admin)
+
+DELETE {{baseUrl}}/api/v1/users/{{userId}}/content-restrictions HTTP/1.1
+Authorization: Bearer {{ACCESS_TOKEN}}

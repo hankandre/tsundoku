@@ -1,0 +1,27 @@
+@baseUrl = http://localhost:6060
+@token = 
+
+###
+# Get audit logs
+GET {{baseUrl}}/api/v1/audit-logs
+Authorization: Bearer {{token}}
+
+###
+# Get audit logs filtered by user
+GET {{baseUrl}}/api/v1/audit-logs?userId={{userId}}
+Authorization: Bearer {{token}}
+
+###
+# Get audit logs filtered by action
+GET {{baseUrl}}/api/v1/audit-logs?action=BOOK_UPDATED
+Authorization: Bearer {{token}}
+
+###
+# Get audit logs filtered by date range
+GET {{baseUrl}}/api/v1/audit-logs?startDate=2024-01-01&endDate=2024-01-31
+Authorization: Bearer {{token}}
+
+###
+# Get usernames for audit logs (admin only)
+GET {{baseUrl}}/api/v1/audit-logs/usernames
+Authorization: Bearer {{token}}

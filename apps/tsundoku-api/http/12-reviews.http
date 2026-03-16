@@ -1,0 +1,22 @@
+@baseUrl = http://localhost:6060
+@token = 
+
+###
+# Get reviews for book
+GET {{baseUrl}}/api/v1/reviews/book/{{bookId}}
+Authorization: Bearer {{token}}
+
+###
+# Refresh reviews for book
+POST {{baseUrl}}/api/v1/reviews/book/{{bookId}}/refresh
+Authorization: Bearer {{token}}
+
+###
+# Delete review
+DELETE {{baseUrl}}/api/v1/reviews/{{reviewId}}
+Authorization: Bearer {{token}}
+
+###
+# Delete all reviews for book
+DELETE {{baseUrl}}/api/v1/reviews/book/{{bookId}}
+Authorization: Bearer {{token}}

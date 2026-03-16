@@ -1,0 +1,44 @@
+@baseUrl = http://localhost:6060
+@token = 
+
+###
+# Get all bookmarks
+GET {{baseUrl}}/api/v1/bookmarks
+Authorization: Bearer {{token}}
+
+###
+# Get bookmark by ID
+GET {{baseUrl}}/api/v1/bookmarks/{{bookmarkId}}
+Authorization: Bearer {{token}}
+
+###
+# Create bookmark
+POST {{baseUrl}}/api/v1/bookmarks
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "bookId": "{{bookId}}",
+  "cfi": "page:10",
+  "title": "Chapter 1"
+}
+
+###
+# Update bookmark
+PUT {{baseUrl}}/api/v1/bookmarks/{{bookmarkId}}
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "title": "Updated Bookmark"
+}
+
+###
+# Delete bookmark
+DELETE {{baseUrl}}/api/v1/bookmarks/{{bookmarkId}}
+Authorization: Bearer {{token}}
+
+###
+# Delete bookmark by cfi
+DELETE {{baseUrl}}/api/v1/bookmarks/book/{{bookId}}/cfi/page:10
+Authorization: Bearer {{token}}

@@ -1,0 +1,45 @@
+@baseUrl = http://localhost:6060
+@token = 
+
+###
+# Get all book notes
+GET {{baseUrl}}/api/v1/book-notes
+Authorization: Bearer {{token}}
+
+###
+# Get notes for book
+GET {{baseUrl}}/api/v1/book-notes/book/{{bookId}}
+Authorization: Bearer {{token}}
+
+###
+# Get note by ID
+GET {{baseUrl}}/api/v1/book-notes/{{noteId}}
+Authorization: Bearer {{token}}
+
+###
+# Create note
+POST {{baseUrl}}/api/v1/book-notes
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "bookId": "{{bookId}}",
+  "cfi": "page:10",
+  "text": "My note content"
+}
+
+###
+# Update note
+PUT {{baseUrl}}/api/v1/book-notes/{{noteId}}
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "cfi": "page:15",
+  "text": "Updated note"
+}
+
+###
+# Delete note
+DELETE {{baseUrl}}/api/v1/book-notes/{{noteId}}
+Authorization: Bearer {{token}}
