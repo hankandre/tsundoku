@@ -46,7 +46,8 @@
       if (r.ok) await refreshBookmarks();
     } catch { /* best-effort */ }
   }
-  async function deleteBookmark(id: string) {
+  async function deleteBookmark(id: string, label: string) {
+    if (!confirm(`Delete bookmark${label ? ` "${label}"` : ""}?`)) return;
     try {
       const r = await rpc.api.v1.bookmarks[":bookmarkId"].$delete({
         param: { bookmarkId: id },
@@ -66,7 +67,9 @@
       if (r.ok) await refreshNotes();
     } catch { /* best-effort */ }
   }
-  async function deleteNote(id: string) {
+  async function deleteNote(id: string, preview: string) {
+    const snippet = preview.length > 40 ? preview.slice(0, 40) + "…" : preview;
+    if (!confirm(`Delete note${snippet ? ` "${snippet}"` : ""}?`)) return;
     try {
       const r = await rpc.api.v1.notes[":noteId"].$delete({ param: { noteId: id } });
       if (r.ok) await refreshNotes();
@@ -217,7 +220,7 @@
               </button>
               <button
                 type="button"
-                onclick={() => deleteNote(n.id)}
+                onclick={() => deleteNote(n.id, n.noteContent ?? "")}
                 class="text-[10px] text-muted-foreground hover:text-destructive"
               >
                 Delete
@@ -249,7 +252,7 @@
               </button>
               <button
                 type="button"
-                onclick={() => deleteBookmark(b.id)}
+                onclick={() => deleteBookmark(b.id, b.label ?? "")}
                 class="text-[10px] text-muted-foreground hover:text-destructive"
               >
                 Delete

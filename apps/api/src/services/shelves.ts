@@ -34,6 +34,25 @@ export async function listShelves(userId: string): Promise<ShelfRecord[]> {
   return rows.map((r) => ({ ...r, bookCount: counts.get(r.id) ?? 0 }));
 }
 
+export async function getShelf(
+  userId: string,
+  shelfId: string,
+): Promise<ShelfRecord | null> {
+  const db = requireDb();
+  const rows = await db
+    .select()
+    .from(schema.shelves)
+    .where(and(eq(schema.shelves.id, shelfId), eq(schema.shelves.userId, userId)))
+    .limit(1);
+  const row = rows[0];
+  if (!row) return null;
+  const countRows = await db
+    .select({ count: sql<number>`count(*)::int` })
+    .from(schema.bookShelfMapping)
+    .where(eq(schema.bookShelfMapping.shelfId, shelfId));
+  return { ...row, bookCount: countRows[0]?.count ?? 0 };
+}
+
 export async function createShelf(input: {
   userId: string;
   name: string;

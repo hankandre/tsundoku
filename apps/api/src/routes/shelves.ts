@@ -6,6 +6,7 @@ import { authRequired } from "../middleware/auth.ts";
 import { IdParam } from "../utils/schemas.ts";
 import {
   listShelves,
+  getShelf,
   createShelf,
   deleteShelf,
   setShelfBooks,
@@ -70,6 +71,13 @@ export const shelfRoutes = new Hono()
     const u = c.var.user!;
     const shelf = await createShelf({ userId: u.id, ...c.req.valid("json") });
     return c.json(shelf, 201);
+  })
+  .get("/shelves/:id", sValidator("param", IdParam), async (c) => {
+    const u = c.var.user!;
+    const { id } = c.req.valid("param");
+    const shelf = await getShelf(u.id, id);
+    if (!shelf) throw new HTTPException(404, { message: "Shelf not found" });
+    return c.json(shelf);
   })
   .delete("/shelves/:id", sValidator("param", IdParam), async (c) => {
     const u = c.var.user!;

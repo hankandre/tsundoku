@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount } from "svelte";
   import { page } from "$app/state";
+  import { goto, invalidateAll } from "$app/navigation";
   import Home from "@lucide/svelte/icons/house";
   import LibraryIcon from "@lucide/svelte/icons/library";
   import BookOpen from "@lucide/svelte/icons/book-open";
@@ -12,9 +13,36 @@
   import Upload from "@lucide/svelte/icons/upload";
   import Inbox from "@lucide/svelte/icons/inbox";
   import ChevronRight from "@lucide/svelte/icons/chevron-right";
+  import MoreVertical from "@lucide/svelte/icons/more-vertical";
+  import Pencil from "@lucide/svelte/icons/pencil";
+  import Trash2 from "@lucide/svelte/icons/trash-2";
   import X from "@lucide/svelte/icons/x";
   import type { Component } from "svelte";
   import { cn } from "$lib/utils";
+  import * as DropdownMenu from "$lib/components/ui/dropdown-menu";
+
+  async function deleteMagicShelf(id: string | number, name: string) {
+    if (!confirm(`Delete magic shelf "${name}"? Your books aren't affected.`)) {
+      return;
+    }
+    const fd = new FormData();
+    fd.set("id", String(id));
+    // POSTs to the route's form action regardless of which page we're on.
+    // The `x-sveltekit-action` header tells the server to return a
+    // serialized ActionResult instead of issuing a redirect.
+    await fetch("/magic-shelves?/delete", {
+      method: "POST",
+      body: fd,
+      headers: { "x-sveltekit-action": "true" },
+    });
+    // Re-runs the layout loader so the shelves list (and any other shelf-
+    // dependent data) reflects the deletion.
+    await invalidateAll();
+    // If the user was viewing the deleted shelf, bounce them out.
+    if (page.url.pathname === `/magic-shelves/${id}`) {
+      await goto("/magic-shelves");
+    }
+  }
 
   type SidebarLibrary = { id: number | string; name: string; count?: number; icon?: string };
   type SidebarShelf = { id: number | string; name: string; count?: number };
@@ -172,6 +200,67 @@
       </a>
     {/snippet}
 
+    {#snippet magicShelfRow(s: SidebarShelf)}
+      {@const href = `/magic-shelves/${s.id}`}
+      {@const active = isActive(href)}
+      <div
+        class={cn(
+          "group/row flex items-center rounded-md transition-colors",
+          active
+            ? "bg-sidebar-accent text-sidebar-accent-foreground"
+            : "text-sidebar-foreground/80 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
+        )}
+      >
+        <a
+          {href}
+          class="flex flex-1 items-center gap-3 rounded-md px-2.5 py-1.5 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring"
+          aria-current={active ? "page" : undefined}
+          onclick={() => onCloseMobile?.()}
+        >
+          <Sparkles size={15} class="shrink-0 opacity-80" />
+          <span class={cn("flex-1 truncate", active && "font-medium")}>{s.name}</span>
+          {#if s.count !== undefined && s.count !== null}
+            <span
+              class={cn(
+                "font-mono text-[10px] tabular-nums tracking-wide",
+                active ? "text-sidebar-accent-foreground/80" : "text-muted-foreground",
+              )}
+            >
+              {s.count}
+            </span>
+          {/if}
+        </a>
+        <DropdownMenu.Root>
+          <DropdownMenu.Trigger
+            class={cn(
+              "mr-1 inline-flex h-7 w-7 items-center justify-center rounded-md text-sidebar-foreground/55 transition-opacity",
+              "opacity-0 focus-visible:opacity-100 data-[state=open]:opacity-100",
+              "group-hover/row:opacity-100 group-focus-within/row:opacity-100",
+              "hover:bg-accent hover:text-foreground",
+              "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring",
+            )}
+            aria-label={`Actions for ${s.name}`}
+          >
+            <MoreVertical size={13} />
+          </DropdownMenu.Trigger>
+          <DropdownMenu.Content align="end" sideOffset={4} class="min-w-[180px]">
+            <DropdownMenu.Item onclick={() => goto(href)}>
+              <Pencil size={13} class="opacity-70" />
+              Edit rules
+            </DropdownMenu.Item>
+            <DropdownMenu.Separator />
+            <DropdownMenu.Item
+              class="text-destructive focus:text-destructive focus:bg-destructive/10"
+              onclick={() => deleteMagicShelf(s.id, s.name)}
+            >
+              <Trash2 size={13} class="opacity-70" />
+              Delete shelf
+            </DropdownMenu.Item>
+          </DropdownMenu.Content>
+        </DropdownMenu.Root>
+      </div>
+    {/snippet}
+
     {#snippet collapsibleGroupHeader(
       key: GroupKey,
       label: string,
@@ -312,7 +401,7 @@
         <div class="min-h-0 overflow-hidden">
           <div class="mt-1 space-y-0.5">
             {#each magicShelves as s (s.id)}
-              {@render navLink(`/magic-shelves/${s.id}`, Sparkles, s.name, s.count)}
+              {@render magicShelfRow(s)}
             {/each}
           </div>
         </div>
