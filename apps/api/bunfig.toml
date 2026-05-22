@@ -1,0 +1,6 @@
+# Per-workspace bun config. Workspace-wide defaults live in /bunfig.toml.
+
+[test]
+# Boot pglite + apply migrations + set the db singleton before any test runs.
+# Keeps tests isolated from the developer's local Postgres.
+preload = ["./test/setup.ts"]
