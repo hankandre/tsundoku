@@ -2,9 +2,8 @@
   import Plus from "@lucide/svelte/icons/plus";
   import Trash2 from "@lucide/svelte/icons/trash-2";
   import * as Select from "$lib/components/ui/select";
-  import { Input } from "$lib/components/ui/input";
-  import { Label } from "$lib/components/ui/label";
   import { cn } from "$lib/utils";
+  import RuleValueInput from "./RuleValueInput.svelte";
   import {
     EMPTY_RULES,
     FIELDS,
@@ -27,9 +26,10 @@
   let { rules = $bindable() }: Props = $props();
 
   // Foundation scope: the builder is flat — only leaf rules under the top
-  // group. Nested groups can come later; the API + JSON shape already
-  // support them.
+  // group. Nested groups can come later; the JSON shape already supports them.
   const leaves = $derived(rules.rules.filter(isLeaf));
+
+  type ValueMode = "none" | "single" | "range" | "list";
 
   function setJoin(j: "and" | "or") {
     rules = { ...rules, join: j };
@@ -81,28 +81,21 @@
     return meta ? OPERATORS_BY_KIND[meta.kind] : [];
   }
 
-  function operatorNeedsValue(op: OperatorName): "none" | "single" | "range" | "list" {
+  function operatorNeedsValue(op: OperatorName): ValueMode {
     if (op === "is_empty" || op === "is_not_empty") return "none";
     if (op === "in_between") return "range";
     if (op === "includes_any" || op === "includes_all" || op === "excludes_all") return "list";
     return "single";
   }
 
-  // Comma-separated list values are split client-side so the evaluator gets a
-  // plain string[] — the alternative (multi-select) needs server-fed
-  // suggestions we don't have plumbed yet.
-  function setListValue(index: number, raw: string) {
-    const items = raw
-      .split(",")
-      .map((s) => s.trim())
-      .filter(Boolean);
-    updateRule(index, { value: items });
+  function joinLabel(join: "and" | "or"): string {
+    if (join === "and") return "all";
+    return "any";
   }
 
-  function listValueDisplay(rule: LeafRule): string {
-    if (Array.isArray(rule.value)) return rule.value.join(", ");
-    if (rule.value == null) return "";
-    return String(rule.value);
+  function joinButtonClass(join: "and" | "or"): string {
+    if (rules.join === join) return "bg-primary text-primary-foreground";
+    return "text-muted-foreground hover:bg-muted hover:text-foreground";
   }
 
   if (!rules || !rules.type) {
@@ -110,180 +103,106 @@
   }
 </script>
 
-<div class="space-y-3 rounded-md border border-border bg-card p-4">
-  <div class="flex items-center justify-between">
-    <div class="flex items-center gap-2">
-      <span class="text-xs font-medium uppercase tracking-wider text-muted-foreground">
-        Match
-      </span>
-      <div class="inline-flex overflow-hidden rounded-md border border-border">
+<div class="space-y-3">
+  <!-- Row-header strip: AND/ANY toggle inline with the "match … of" copy, +rule on the right. -->
+  <div class="flex flex-wrap items-baseline justify-between gap-3">
+    <div class="flex items-baseline gap-2 font-mono text-[11px] uppercase tracking-[0.12em] text-muted-foreground">
+      <span>match</span>
+      <div class="inline-flex h-7 overflow-hidden rounded-md border border-border bg-background">
         {#each ["and", "or"] as const as j (j)}
           <button
             type="button"
             class={cn(
-              "px-2.5 py-1 text-xs font-medium uppercase",
-              rules.join === j
-                ? "bg-primary text-primary-foreground"
-                : "bg-background text-muted-foreground hover:bg-muted",
+              "px-3 text-[10px] font-medium uppercase tracking-[0.16em] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+              joinButtonClass(j),
             )}
             onclick={() => setJoin(j)}
+            aria-pressed={rules.join === j}
           >
-            {j === "and" ? "all" : "any"}
+            {joinLabel(j)}
           </button>
         {/each}
       </div>
-      <span class="text-xs text-muted-foreground">of the following rules</span>
+      <span>of the following</span>
     </div>
     <button
       type="button"
       onclick={addRule}
-      class="inline-flex items-center gap-1 rounded-md border border-input bg-background px-2 py-1 text-xs text-muted-foreground hover:bg-muted hover:text-foreground"
+      class="inline-flex h-7 items-center gap-1.5 rounded-md border border-input bg-background px-2.5 text-xs text-muted-foreground transition-colors hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
     >
       <Plus size={13} /> Add rule
+      <kbd class="ml-1 hidden font-mono text-[9px] uppercase tracking-wider text-muted-foreground/70 sm:inline">⌘N</kbd>
     </button>
   </div>
 
   {#if leaves.length === 0}
-    <p class="rounded-md border border-dashed border-border bg-muted/40 px-3 py-4 text-center text-xs text-muted-foreground">
-      No rules yet — every book in your libraries will match. Add a rule to narrow it down.
+    <p class="border-y border-dashed border-border py-4 text-center text-xs italic text-muted-foreground">
+      No rules yet — every book in your libraries matches. Add a rule to narrow it down.
     </p>
   {:else}
-    <ul class="space-y-2">
+    <!-- Tabular grid: field / operator / value / delete. The eye reads down
+         columns; per the operator-console brief, no per-row card surface. -->
+    <div
+      class="grid grid-cols-[minmax(140px,1fr)_minmax(120px,1fr)_minmax(160px,2fr)_auto] gap-x-3 gap-y-2"
+      role="list"
+    >
+      <!-- Column headers as mono captions. Hidden visually on narrow widths
+           (the field labels reappear inline on each row instead). -->
+      <span class="hidden font-mono text-[10px] uppercase tracking-[0.16em] text-muted-foreground/70 sm:block">Field</span>
+      <span class="hidden font-mono text-[10px] uppercase tracking-[0.16em] text-muted-foreground/70 sm:block">Op</span>
+      <span class="hidden font-mono text-[10px] uppercase tracking-[0.16em] text-muted-foreground/70 sm:block">Value</span>
+      <span aria-hidden="true"></span>
+
       {#each leaves as rule, i (i)}
         {@const meta = fieldMeta(rule.field)}
         {@const valueMode = operatorNeedsValue(rule.operator)}
-        <li class="flex flex-wrap items-end gap-2">
-          <div class="space-y-1">
-            <Label class="text-[10px] uppercase tracking-wider text-muted-foreground">Field</Label>
-            <Select.Root type="single" value={rule.field} onValueChange={(v) => v && changeField(i, v)}>
-              <Select.Trigger class="h-8 w-44 text-xs">
-                {meta?.label ?? rule.field}
-              </Select.Trigger>
-              <Select.Content>
-                {#each FIELDS as f (f.name)}
-                  <Select.Item value={f.name} label={f.label}>{f.label}</Select.Item>
-                {/each}
-              </Select.Content>
-            </Select.Root>
-          </div>
+        <!-- Field -->
+        <Select.Root type="single" value={rule.field} onValueChange={(v) => v && changeField(i, v)}>
+          <Select.Trigger class="h-8 w-full text-xs">
+            {meta?.label ?? rule.field}
+          </Select.Trigger>
+          <Select.Content>
+            {#each FIELDS as f (f.name)}
+              <Select.Item value={f.name} label={f.label}>{f.label}</Select.Item>
+            {/each}
+          </Select.Content>
+        </Select.Root>
 
-          <div class="space-y-1">
-            <Label class="text-[10px] uppercase tracking-wider text-muted-foreground">Op</Label>
-            <Select.Root
-              type="single"
-              value={rule.operator}
-              onValueChange={(v) => v && updateRule(i, { operator: v as OperatorName })}
-            >
-              <Select.Trigger class="h-8 w-40 text-xs">
-                {OPERATOR_LABELS[rule.operator] ?? rule.operator}
-              </Select.Trigger>
-              <Select.Content>
-                {#each operatorsFor(rule.field) as op (op)}
-                  <Select.Item value={op} label={OPERATOR_LABELS[op]}>{OPERATOR_LABELS[op]}</Select.Item>
-                {/each}
-              </Select.Content>
-            </Select.Root>
-          </div>
+        <!-- Operator -->
+        <Select.Root
+          type="single"
+          value={rule.operator}
+          onValueChange={(v) => v && updateRule(i, { operator: v as OperatorName })}
+        >
+          <Select.Trigger class="h-8 w-full text-xs">
+            {OPERATOR_LABELS[rule.operator] ?? rule.operator}
+          </Select.Trigger>
+          <Select.Content>
+            {#each operatorsFor(rule.field) as op (op)}
+              <Select.Item value={op} label={OPERATOR_LABELS[op]}>{OPERATOR_LABELS[op]}</Select.Item>
+            {/each}
+          </Select.Content>
+        </Select.Root>
 
-          {#if valueMode === "single"}
-            <div class="space-y-1 flex-1 min-w-[180px]">
-              <Label class="text-[10px] uppercase tracking-wider text-muted-foreground">Value</Label>
-              {#if meta?.kind === "enum"}
-                <Select.Root
-                  type="single"
-                  value={String(rule.value ?? "")}
-                  onValueChange={(v) => v != null && updateRule(i, { value: v })}
-                >
-                  <Select.Trigger class="h-8 w-full text-xs">
-                    {meta.options?.find((o) => o.value === String(rule.value ?? ""))?.label ?? "—"}
-                  </Select.Trigger>
-                  <Select.Content>
-                    {#each meta.options ?? [] as opt (opt.value)}
-                      <Select.Item value={opt.value} label={opt.label}>{opt.label}</Select.Item>
-                    {/each}
-                  </Select.Content>
-                </Select.Root>
-              {:else if meta?.kind === "number"}
-                <Input
-                  type="number"
-                  step="any"
-                  class="h-8 text-xs"
-                  value={rule.value == null ? "" : String(rule.value)}
-                  oninput={(e) => {
-                    const raw = (e.currentTarget as HTMLInputElement).value;
-                    updateRule(i, { value: raw === "" ? null : Number(raw) });
-                  }}
-                />
-              {:else if meta?.kind === "date"}
-                <Input
-                  type="date"
-                  class="h-8 text-xs"
-                  value={typeof rule.value === "string" ? rule.value : ""}
-                  oninput={(e) => updateRule(i, { value: (e.currentTarget as HTMLInputElement).value })}
-                />
-              {:else}
-                <Input
-                  type="text"
-                  class="h-8 text-xs"
-                  value={rule.value == null ? "" : String(rule.value)}
-                  oninput={(e) => updateRule(i, { value: (e.currentTarget as HTMLInputElement).value })}
-                />
-              {/if}
-            </div>
-          {:else if valueMode === "range"}
-            <div class="space-y-1">
-              <Label class="text-[10px] uppercase tracking-wider text-muted-foreground">From</Label>
-              <Input
-                type={meta?.kind === "date" ? "date" : "number"}
-                step="any"
-                class="h-8 w-32 text-xs"
-                value={rule.valueStart == null ? "" : String(rule.valueStart)}
-                oninput={(e) => {
-                  const raw = (e.currentTarget as HTMLInputElement).value;
-                  const v = meta?.kind === "date" ? raw : raw === "" ? null : Number(raw);
-                  updateRule(i, { valueStart: v });
-                }}
-              />
-            </div>
-            <div class="space-y-1">
-              <Label class="text-[10px] uppercase tracking-wider text-muted-foreground">To</Label>
-              <Input
-                type={meta?.kind === "date" ? "date" : "number"}
-                step="any"
-                class="h-8 w-32 text-xs"
-                value={rule.valueEnd == null ? "" : String(rule.valueEnd)}
-                oninput={(e) => {
-                  const raw = (e.currentTarget as HTMLInputElement).value;
-                  const v = meta?.kind === "date" ? raw : raw === "" ? null : Number(raw);
-                  updateRule(i, { valueEnd: v });
-                }}
-              />
-            </div>
-          {:else if valueMode === "list"}
-            <div class="space-y-1 flex-1 min-w-[200px]">
-              <Label class="text-[10px] uppercase tracking-wider text-muted-foreground">
-                Values (comma-separated)
-              </Label>
-              <Input
-                type="text"
-                class="h-8 text-xs"
-                placeholder="e.g. Alice, Bob"
-                value={listValueDisplay(rule)}
-                oninput={(e) => setListValue(i, (e.currentTarget as HTMLInputElement).value)}
-              />
-            </div>
-          {/if}
+        <!-- Value cell — morphs by operator + field kind. -->
+        <div class="min-w-0">
+          <RuleValueInput
+            {rule}
+            {meta}
+            mode={valueMode}
+            onPatch={(patch) => updateRule(i, patch)}
+          />
+        </div>
 
-          <button
-            type="button"
-            onclick={() => removeRule(i)}
-            aria-label="Remove rule"
-            class="ml-auto inline-flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
-          >
-            <Trash2 size={14} />
-          </button>
-        </li>
+        <button
+          type="button"
+          onclick={() => removeRule(i)}
+          aria-label="Remove rule"
+          class="inline-flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-destructive"
+        >
+          <Trash2 size={14} />
+        </button>
       {/each}
-    </ul>
+    </div>
   {/if}
 </div>

@@ -8,10 +8,17 @@ export const load: PageServerLoad = async ({ params, locals, cookies, fetch, url
   if (!id) throw error(400, "Bad book id");
 
   const { rpc } = locals;
-  const res = await rpc.api.v1.books[":id"].$get({ param: { id } });
-  if (res.status === 404) throw error(404, "Book not found");
-  if (!res.ok) throw error(res.status, "Failed to load book");
-  const book = await res.json();
+  const [bookRes, shelvesRes, memberRes] = await Promise.all([
+    rpc.api.v1.books[":id"].$get({ param: { id } }),
+    rpc.api.v1.shelves.$get(),
+    rpc.api.v1.books[":id"].shelves.$get({ param: { id } }),
+  ]);
+  if (bookRes.status === 404) throw error(404, "Book not found");
+  if (!bookRes.ok) throw error(bookRes.status, "Failed to load book");
 
-  return { book };
+  const book = await bookRes.json();
+  const shelves = shelvesRes.ok ? await shelvesRes.json() : [];
+  const member = memberRes.ok ? await memberRes.json() : { shelfIds: [] };
+
+  return { book, shelves, shelfIds: member.shelfIds };
 };

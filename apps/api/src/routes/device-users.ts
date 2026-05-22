@@ -15,6 +15,22 @@ const CreateBody = type({
   label: "1 <= string <= 128",
 });
 
+function isUniqueViolation(error: unknown): boolean {
+  let current = error;
+  while (current && typeof current === "object") {
+    const candidate = current as { code?: string; message?: string; cause?: unknown };
+    if (candidate.code === "23505") return true;
+    if (
+      typeof candidate.message === "string" &&
+      /(duplicate key|unique constraint|violates unique)/i.test(candidate.message)
+    ) {
+      return true;
+    }
+    current = candidate.cause;
+  }
+  return false;
+}
+
 export const deviceUserRoutes = new Hono()
   .use("*", authRequired)
   .get("/device-users", async (c) => {
@@ -29,7 +45,7 @@ export const deviceUserRoutes = new Hono()
       return c.json(result, 201);
     } catch (e) {
       // Unique-violation on (userId, deviceType, label).
-      if (e instanceof Error && /unique/i.test(e.message)) {
+      if (isUniqueViolation(e)) {
         throw new HTTPException(409, {
           message: "A device with that label already exists",
         });

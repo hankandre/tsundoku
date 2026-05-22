@@ -1,9 +1,9 @@
 import type { Actions, PageServerLoad } from "./$types";
 import { error, fail, redirect } from "@sveltejs/kit";
-import { requireLogin } from "$lib/server/session";
+import { getAccessToken, requireLogin } from "$lib/server/session";
 import { EMPTY_RULES, type GroupRule } from "$lib/magic-shelves/types";
 
-export const load: PageServerLoad = async ({ params, locals, url }) => {
+export const load: PageServerLoad = async ({ params, cookies, locals, url }) => {
   requireLogin(locals, url.pathname);
   const { rpc } = locals;
   const id = params.id;
@@ -20,6 +20,9 @@ export const load: PageServerLoad = async ({ params, locals, url }) => {
   return {
     shelf: await shelfRes.json(),
     books: await booksRes.json(),
+    // The detail page runs a debounced live-preview from the browser, so it
+    // needs an access token to call /api/v1/magic-shelves/preview directly.
+    accessToken: getAccessToken(cookies),
   };
 };
 

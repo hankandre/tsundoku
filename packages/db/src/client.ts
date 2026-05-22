@@ -26,3 +26,25 @@ export async function closeDb(): Promise<void> {
   _client = null;
   _db = null;
 }
+
+/**
+ * Construct an in-process pglite-backed Drizzle client. Intended for tests:
+ * each call returns a fresh instance with no migrations applied — callers
+ * (typically `apps/api/test/setup.ts`) run the migrations and inject the
+ * result via `apps/api/src/db.ts#setDb`.
+ *
+ * The `@electric-sql/pglite` dep lives in `apps/api` rather than here so the
+ * production bundle never pulls in the WASM Postgres build. We `await import`
+ * it lazily for the same reason — if a non-test caller invokes this on a
+ * tree where pglite isn't installed, the error surfaces at call-time.
+ */
+export type PgliteDatabase = ReturnType<
+  typeof import("drizzle-orm/pglite").drizzle<typeof schema>
+>;
+
+export async function getPgliteDb(): Promise<PgliteDatabase> {
+  const { PGlite } = await import("@electric-sql/pglite");
+  const { drizzle: drizzlePglite } = await import("drizzle-orm/pglite");
+  const client = new PGlite();
+  return drizzlePglite(client, { schema });
+}

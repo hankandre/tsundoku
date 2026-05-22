@@ -8,9 +8,19 @@
   import { Button } from "$lib/components/ui/button";
   import BookCover from "$lib/components/library/book-cover.svelte";
   import FormatLabel from "$lib/components/ui/format-label.svelte";
+  import BookShelves from "$lib/components/library/book-shelves.svelte";
 
   let { data }: { data: PageData } = $props();
   const b = $derived(data.book);
+  let shelves = $state(data.shelves);
+  let currentShelfIds = $state(data.shelfIds);
+
+  // Re-sync if the route changes to a different book (SvelteKit reuses the
+  // component when navigating between sibling [id]s).
+  $effect(() => {
+    shelves = data.shelves;
+    currentShelfIds = data.shelfIds;
+  });
 
   type ReaderInfo = {
     href: string;
@@ -79,6 +89,10 @@
           <Download size={14} />
           Download
         </Button>
+      </div>
+
+      <div class="border-t border-border pt-6">
+        <BookShelves bookId={b.id} bind:shelves bind:current={currentShelfIds} />
       </div>
 
       <dl
