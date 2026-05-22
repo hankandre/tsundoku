@@ -1,4 +1,4 @@
-import { sql, eq, asc, inArray } from "drizzle-orm";
+import { sql, eq, asc, inArray, and } from "drizzle-orm";
 import { schema } from "@tsundoku/db";
 import { requireDb } from "../db.ts";
 
@@ -95,11 +95,13 @@ export async function getBooksByAuthor(authorId: string, allowed: string[] | "al
     .where(eq(schema.bookMetadataAuthorMapping.authorId, authorId));
   const bookIds = mapping.map((m) => m.bookId);
   if (bookIds.length === 0) return [];
+  if (allowed !== "all" && allowed.length === 0) return [];
 
+  const bookFilter = inArray(schema.books.id, bookIds);
   const whereClause =
     allowed === "all"
-      ? inArray(schema.books.id, bookIds)
-      : sql`${schema.books.id} = ANY(${bookIds}) AND ${schema.books.libraryId} = ANY(${allowed})`;
+      ? bookFilter
+      : and(bookFilter, inArray(schema.books.libraryId, allowed));
   const rows = await db
     .select({
       id: schema.books.id,

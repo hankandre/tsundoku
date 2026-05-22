@@ -60,19 +60,19 @@ export const app = new Hono()
   // Mount order matters: in Hono, a sub-app's `.use("*", mw)` applies to every
   // handler registered AFTER it on the parent. Sub-apps that gate their whole
   // surface (`libraryRoutes`, `bookRoutes`, `shelfRoutes`, `adminRoutes`) leak
-  // that middleware onto siblings mounted later. Keep open routes first, then
-  // user-scoped routes, then admin-scoped routes last.
+  // that middleware onto siblings mounted later. Keep open/self-authenticating
+  // routes first, then user-scoped routes, then admin-scoped routes last.
   .route("/api/v1", publicRoutes)
-  .route("/api/v1", libraryRoutes)
+  .route("/api/v1", readerRoutes)
+  .route("/api/v1", opdsRoutes)
+  .route("/api/v1", deviceRoutes)
   .route("/api/v1", bookRoutes)
+  .route("/api/v1", libraryRoutes)
   .route("/api/v1", shelfRoutes)
   .route("/api/v1", metadataRoutes)
-  .route("/api/v1", readerRoutes)
   .route("/api/v1", statsRoutes)
   .route("/api/v1", scanRoutes)
   .route("/api/v1", uploadRoutes)
-  .route("/api/v1", opdsRoutes)
-  .route("/api/v1", deviceRoutes)
   .route("/api/v1", bookdropRoutes)
   .route("/api/v1", authorRoutes)
   .route("/api/v1", seriesRoutes)

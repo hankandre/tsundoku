@@ -12,19 +12,13 @@
    *   <DirectoryPicker open={pickerOpen} onSelect={(p) => …} onClose={() => …} />
    */
 
-  type Entry = {
-    name: string;
-    isDir: boolean;
-    isMount: boolean;
-  };
-
-  type ListResponse = {
-    path: string;
-    parent: string | null;
-    root: string;
-    writable: boolean;
-    entries: Entry[];
-  };
+  import {
+    breadcrumbs,
+    buildDirectoryListUrl,
+    childPath,
+    type DirectoryEntry,
+    type DirectoryListResponse,
+  } from "$lib/directory-picker";
 
   type Props = {
     open: boolean;
@@ -41,7 +35,7 @@
   let current = $state<string>("/");
   let wasOpen = $state(false);
 
-  let entries = $state<Entry[]>([]);
+  let entries = $state<DirectoryEntry[]>([]);
   let writable = $state<boolean>(false);
   let parent = $state<string | null>(null);
   let showHidden = $state(false);
@@ -52,9 +46,11 @@
     loading = true;
     errorMsg = null;
     try {
-      const url = new URL("/_internal/fs/list", location.origin);
-      url.searchParams.set("path", p);
-      if (showHidden) url.searchParams.set("showHidden", "true");
+      const url = buildDirectoryListUrl({
+        origin: location.origin,
+        path: p,
+        showHidden,
+      });
       const res = await fetch(url, { credentials: "same-origin" });
       if (!res.ok) {
         errorMsg = `Failed to list (${res.status})`;
@@ -62,7 +58,7 @@
         writable = false;
         return;
       }
-      const data = (await res.json()) as ListResponse;
+      const data = (await res.json()) as DirectoryListResponse;
       current = data.path;
       parent = data.parent;
       writable = data.writable;
@@ -72,6 +68,23 @@
     } finally {
       loading = false;
     }
+  }
+
+  function openDirectory(path: string | null) {
+    if (path) void load(path);
+  }
+
+  function closeOnBackdrop(event: MouseEvent) {
+    if (event.target === event.currentTarget) onClose();
+  }
+
+  function closeOnEscape(event: KeyboardEvent) {
+    if (event.key === "Escape") onClose();
+  }
+
+  function selectCurrent() {
+    onSelect(current);
+    onClose();
   }
 
   // Reseed + load when the picker transitions closed → open.
@@ -92,17 +105,6 @@
     void showHidden;
   });
 
-  function breadcrumb(p: string): { name: string; path: string }[] {
-    if (p === "/") return [{ name: "/", path: "/" }];
-    const parts = p.split("/").filter(Boolean);
-    const out: { name: string; path: string }[] = [{ name: "/", path: "/" }];
-    let acc = "";
-    for (const part of parts) {
-      acc = acc + "/" + part;
-      out.push({ name: part, path: acc });
-    }
-    return out;
-  }
 </script>
 
 {#if open}
@@ -112,12 +114,8 @@
     aria-modal="true"
     aria-labelledby="dp-title"
     tabindex="-1"
-    onclick={(e) => {
-      if (e.target === e.currentTarget) onClose();
-    }}
-    onkeydown={(e) => {
-      if (e.key === "Escape") onClose();
-    }}
+    onclick={closeOnBackdrop}
+    onkeydown={closeOnEscape}
   >
     <div class="w-full max-w-2xl rounded-lg border border-border bg-card shadow-xl">
       <header class="flex items-center justify-between border-b border-border px-4 py-3">
@@ -134,11 +132,11 @@
 
       <div class="border-b border-border px-4 py-2 text-xs text-muted-foreground">
         <nav class="flex flex-wrap items-center gap-x-1">
-          {#each breadcrumb(current) as crumb, i (crumb.path)}
+          {#each breadcrumbs(current) as crumb, i (crumb.path)}
             {#if i > 0}<span class="text-border">/</span>{/if}
             <button
               type="button"
-              onclick={() => load(crumb.path)}
+              onclick={() => openDirectory(crumb.path)}
               class="hover:text-foreground"
             >
               {crumb.name}
@@ -152,7 +150,7 @@
           <li>
             <button
               type="button"
-              onclick={() => load(parent!)}
+              onclick={() => openDirectory(parent)}
               class="flex w-full items-center gap-2 px-4 py-2 text-left text-sm hover:bg-muted"
             >
               <span class="text-muted-foreground">↩</span>
@@ -173,7 +171,7 @@
             <li>
               <button
                 type="button"
-                onclick={() => load(current === "/" ? `/${e.name}` : `${current}/${e.name}`)}
+                onclick={() => openDirectory(childPath(current, e.name))}
                 class="flex w-full items-center gap-2 px-4 py-2 text-left text-sm hover:bg-muted"
               >
                 <span class="text-muted-foreground">📁</span>
@@ -211,10 +209,7 @@
           <button
             type="button"
             disabled={loading}
-            onclick={() => {
-              onSelect(current);
-              onClose();
-            }}
+            onclick={selectCurrent}
             class="rounded-md bg-primary px-3 py-1.5 text-sm font-medium text-primary-foreground hover:opacity-90 disabled:opacity-50"
           >
             Use this folder

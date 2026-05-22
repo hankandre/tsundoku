@@ -2,8 +2,8 @@
   import Plus from "@lucide/svelte/icons/plus";
   import Trash2 from "@lucide/svelte/icons/trash-2";
   import * as Select from "$lib/components/ui/select";
-  import { Input } from "$lib/components/ui/input";
   import { cn } from "$lib/utils";
+  import RuleValueInput from "./RuleValueInput.svelte";
   import {
     EMPTY_RULES,
     FIELDS,
@@ -28,6 +28,8 @@
   // Foundation scope: the builder is flat — only leaf rules under the top
   // group. Nested groups can come later; the JSON shape already supports them.
   const leaves = $derived(rules.rules.filter(isLeaf));
+
+  type ValueMode = "none" | "single" | "range" | "list";
 
   function setJoin(j: "and" | "or") {
     rules = { ...rules, join: j };
@@ -79,28 +81,21 @@
     return meta ? OPERATORS_BY_KIND[meta.kind] : [];
   }
 
-  function operatorNeedsValue(op: OperatorName): "none" | "single" | "range" | "list" {
+  function operatorNeedsValue(op: OperatorName): ValueMode {
     if (op === "is_empty" || op === "is_not_empty") return "none";
     if (op === "in_between") return "range";
     if (op === "includes_any" || op === "includes_all" || op === "excludes_all") return "list";
     return "single";
   }
 
-  // Comma-separated list values get split client-side so the evaluator gets
-  // a plain string[]. A real multi-select needs server-fed suggestions we
-  // haven't plumbed yet.
-  function setListValue(index: number, raw: string) {
-    const items = raw
-      .split(",")
-      .map((s) => s.trim())
-      .filter(Boolean);
-    updateRule(index, { value: items });
+  function joinLabel(join: "and" | "or"): string {
+    if (join === "and") return "all";
+    return "any";
   }
 
-  function listValueDisplay(rule: LeafRule): string {
-    if (Array.isArray(rule.value)) return rule.value.join(", ");
-    if (rule.value == null) return "";
-    return String(rule.value);
+  function joinButtonClass(join: "and" | "or"): string {
+    if (rules.join === join) return "bg-primary text-primary-foreground";
+    return "text-muted-foreground hover:bg-muted hover:text-foreground";
   }
 
   if (!rules || !rules.type) {
@@ -119,14 +114,12 @@
             type="button"
             class={cn(
               "px-3 text-[10px] font-medium uppercase tracking-[0.16em] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-              rules.join === j
-                ? "bg-primary text-primary-foreground"
-                : "text-muted-foreground hover:bg-muted hover:text-foreground",
+              joinButtonClass(j),
             )}
             onclick={() => setJoin(j)}
             aria-pressed={rules.join === j}
           >
-            {j === "and" ? "all" : "any"}
+            {joinLabel(j)}
           </button>
         {/each}
       </div>
@@ -193,89 +186,12 @@
 
         <!-- Value cell — morphs by operator + field kind. -->
         <div class="min-w-0">
-          {#if valueMode === "none"}
-            <span class="font-mono text-[11px] italic text-muted-foreground/70">— no value —</span>
-          {:else if valueMode === "range"}
-            <div class="flex items-center gap-2">
-              <Input
-                type={meta?.kind === "date" ? "date" : "number"}
-                step="any"
-                class="h-8 flex-1 text-xs"
-                value={rule.valueStart == null ? "" : String(rule.valueStart)}
-                oninput={(e) => {
-                  const raw = (e.currentTarget as HTMLInputElement).value;
-                  const v = meta?.kind === "date" ? raw : raw === "" ? null : Number(raw);
-                  updateRule(i, { valueStart: v });
-                }}
-                aria-label="From"
-              />
-              <span class="font-mono text-xs text-muted-foreground">to</span>
-              <Input
-                type={meta?.kind === "date" ? "date" : "number"}
-                step="any"
-                class="h-8 flex-1 text-xs"
-                value={rule.valueEnd == null ? "" : String(rule.valueEnd)}
-                oninput={(e) => {
-                  const raw = (e.currentTarget as HTMLInputElement).value;
-                  const v = meta?.kind === "date" ? raw : raw === "" ? null : Number(raw);
-                  updateRule(i, { valueEnd: v });
-                }}
-                aria-label="To"
-              />
-            </div>
-          {:else if valueMode === "list"}
-            <Input
-              type="text"
-              class="h-8 text-xs"
-              placeholder="comma-separated"
-              value={listValueDisplay(rule)}
-              oninput={(e) => setListValue(i, (e.currentTarget as HTMLInputElement).value)}
-              aria-label="Values"
-            />
-          {:else if meta?.kind === "enum"}
-            <Select.Root
-              type="single"
-              value={String(rule.value ?? "")}
-              onValueChange={(v) => v != null && updateRule(i, { value: v })}
-            >
-              <Select.Trigger class="h-8 w-full text-xs">
-                {meta.options?.find((o) => o.value === String(rule.value ?? ""))?.label ?? "—"}
-              </Select.Trigger>
-              <Select.Content>
-                {#each meta.options ?? [] as opt (opt.value)}
-                  <Select.Item value={opt.value} label={opt.label}>{opt.label}</Select.Item>
-                {/each}
-              </Select.Content>
-            </Select.Root>
-          {:else if meta?.kind === "number"}
-            <Input
-              type="number"
-              step="any"
-              class="h-8 text-xs"
-              value={rule.value == null ? "" : String(rule.value)}
-              oninput={(e) => {
-                const raw = (e.currentTarget as HTMLInputElement).value;
-                updateRule(i, { value: raw === "" ? null : Number(raw) });
-              }}
-              aria-label="Value"
-            />
-          {:else if meta?.kind === "date"}
-            <Input
-              type="date"
-              class="h-8 text-xs"
-              value={typeof rule.value === "string" ? rule.value : ""}
-              oninput={(e) => updateRule(i, { value: (e.currentTarget as HTMLInputElement).value })}
-              aria-label="Value"
-            />
-          {:else}
-            <Input
-              type="text"
-              class="h-8 text-xs"
-              value={rule.value == null ? "" : String(rule.value)}
-              oninput={(e) => updateRule(i, { value: (e.currentTarget as HTMLInputElement).value })}
-              aria-label="Value"
-            />
-          {/if}
+          <RuleValueInput
+            {rule}
+            {meta}
+            mode={valueMode}
+            onPatch={(patch) => updateRule(i, patch)}
+          />
         </div>
 
         <button

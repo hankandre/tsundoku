@@ -55,6 +55,14 @@ export type BookQuery = {
   size?: number;
 };
 
+type BookPage = {
+  content: BookListItem[];
+  page: number;
+  size: number;
+  totalElements: number;
+  totalPages: number;
+};
+
 async function allowedLibraryIds(userId: string, isAdmin: boolean): Promise<string[] | "all"> {
   if (isAdmin) return "all";
   const db = requireDb();
@@ -65,18 +73,67 @@ async function allowedLibraryIds(userId: string, isAdmin: boolean): Promise<stri
   return rows.map((r) => r.libraryId);
 }
 
+function emptyBookPage(page: number, size: number): BookPage {
+  return { content: [], page, size, totalElements: 0, totalPages: 0 };
+}
+
+async function ownedMagicShelfRules(
+  magicShelfId: string,
+  userId: string,
+): Promise<MagicShelfRulesInput | null> {
+  const db = requireDb();
+  const shelfRows = await db
+    .select({
+      rules: schema.magicShelves.rules,
+      userId: schema.magicShelves.userId,
+    })
+    .from(schema.magicShelves)
+    .where(eq(schema.magicShelves.id, magicShelfId))
+    .limit(1);
+
+  const shelf = shelfRows[0];
+  if (!shelf || shelf.userId !== userId) return null;
+  return shelf.rules as MagicShelfRulesInput;
+}
+
+async function authorsForBooks(bookIds: string[]): Promise<Map<string, string[]>> {
+  const authorsByBook = new Map<string, string[]>();
+  if (!bookIds.length) return authorsByBook;
+
+  const db = requireDb();
+  const authorRows = await db
+    .select({
+      bookId: schema.bookMetadataAuthorMapping.bookId,
+      name: schema.authors.name,
+    })
+    .from(schema.bookMetadataAuthorMapping)
+    .innerJoin(
+      schema.authors,
+      eq(schema.authors.id, schema.bookMetadataAuthorMapping.authorId),
+    )
+    .where(inArray(schema.bookMetadataAuthorMapping.bookId, bookIds));
+
+  for (const author of authorRows) {
+    const list = authorsByBook.get(author.bookId) ?? [];
+    list.push(author.name);
+    authorsByBook.set(author.bookId, list);
+  }
+
+  return authorsByBook;
+}
+
 export async function listBooks(
   userId: string,
   isAdmin: boolean,
   q: BookQuery,
-): Promise<{ content: BookListItem[]; page: number; size: number; totalElements: number; totalPages: number }> {
+): Promise<BookPage> {
   const db = requireDb();
   const page = Math.max(0, q.page ?? 0);
   const size = Math.min(100, Math.max(1, q.size ?? 25));
 
   const allowed = await allowedLibraryIds(userId, isAdmin);
   if (allowed !== "all" && allowed.length === 0) {
-    return { content: [], page, size, totalElements: 0, totalPages: 0 };
+    return emptyBookPage(page, size);
   }
 
   const conds: SQL[] = [];
@@ -110,19 +167,9 @@ export async function listBooks(
     // the shelf, then AND the compiled predicate into the books filter.
     // Returning early on a not-owned shelf prevents leaking content the user
     // wouldn't otherwise see via library scoping.
-    const shelfRows = await db
-      .select({
-        rules: schema.magicShelves.rules,
-        userId: schema.magicShelves.userId,
-      })
-      .from(schema.magicShelves)
-      .where(eq(schema.magicShelves.id, q.magicShelfId))
-      .limit(1);
-    const shelf = shelfRows[0];
-    if (!shelf || shelf.userId !== userId) {
-      return { content: [], page, size, totalElements: 0, totalPages: 0 };
-    }
-    conds.push(compileMagicShelfWhere(shelf.rules as MagicShelfRulesInput));
+    const rules = await ownedMagicShelfRules(q.magicShelfId, userId);
+    if (!rules) return emptyBookPage(page, size);
+    conds.push(compileMagicShelfWhere(rules));
   }
   if (q.magicShelfRules != null) {
     conds.push(compileMagicShelfWhere(q.magicShelfRules));
@@ -161,25 +208,7 @@ export async function listBooks(
 
   // Fetch authors per book in a single query.
   const ids = rows.map((r) => r.id);
-  const authorRows = ids.length
-    ? await db
-        .select({
-          bookId: schema.bookMetadataAuthorMapping.bookId,
-          name: schema.authors.name,
-        })
-        .from(schema.bookMetadataAuthorMapping)
-        .innerJoin(
-          schema.authors,
-          eq(schema.authors.id, schema.bookMetadataAuthorMapping.authorId),
-        )
-        .where(inArray(schema.bookMetadataAuthorMapping.bookId, ids))
-    : [];
-  const authorsByBook = new Map<string, string[]>();
-  for (const a of authorRows) {
-    const list = authorsByBook.get(a.bookId) ?? [];
-    list.push(a.name);
-    authorsByBook.set(a.bookId, list);
-  }
+  const authorsByBook = await authorsForBooks(ids);
 
   return {
     content: rows.map((r) => ({

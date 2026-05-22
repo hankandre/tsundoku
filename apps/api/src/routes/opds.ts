@@ -1,4 +1,4 @@
-import { Hono } from "hono";
+import { Hono, type Context } from "hono";
 import { listBooks } from "../services/books.ts";
 import { findByUsername, verifyPassword } from "../services/users.ts";
 import { listLibrariesForUser } from "../services/libraries.ts";
@@ -9,6 +9,49 @@ import { getBatch } from "../services/book-ops.ts";
 import { eq, and, sql } from "drizzle-orm";
 import { schema } from "@tsundoku/db";
 import { requireDb } from "../db.ts";
+
+const OPDS_MIME_BY_BOOK_TYPE: Partial<Record<string, string>> = {
+  PDF: "application/pdf",
+  EPUB: "application/epub+zip",
+  CBX: "application/x-cbz",
+};
+
+const OPDS_ROOT_SECTIONS = [
+  {
+    title: "Recent",
+    id: "urn:tsundoku:catalog:recent",
+    href: "/api/v1/opds/recent",
+    kind: "acquisition" as const,
+    content: "Newest additions",
+  },
+  {
+    title: "Libraries",
+    id: "urn:tsundoku:catalog:libraries",
+    href: "/api/v1/opds/libraries",
+  },
+  {
+    title: "Authors",
+    id: "urn:tsundoku:catalog:authors",
+    href: "/api/v1/opds/authors",
+  },
+  {
+    title: "Shelves",
+    id: "urn:tsundoku:catalog:shelves",
+    href: "/api/v1/opds/shelves",
+  },
+  {
+    title: "In progress",
+    id: "urn:tsundoku:catalog:in-progress",
+    href: "/api/v1/opds/in-progress",
+    kind: "acquisition" as const,
+    content: "Books you've started but not finished",
+  },
+  {
+    title: "Series",
+    id: "urn:tsundoku:catalog:series",
+    href: "/api/v1/opds/series",
+  },
+];
 
 /**
  * OPDS 1.x Atom catalog. Booklore's `OpdsController` serves these to external
@@ -40,6 +83,15 @@ async function basicAuth(authHeader: string | undefined) {
   const user = await findByUsername(username);
   if (!user) return null;
   return (await verifyPassword(user, password)) ? user : null;
+}
+
+type AuthenticatedUser = NonNullable<Awaited<ReturnType<typeof basicAuth>>>;
+type AuthResult = { ok: true; user: AuthenticatedUser } | { ok: false; response: Response };
+
+async function authenticate(c: Context): Promise<AuthResult> {
+  const user = await basicAuth(c.req.header("Authorization"));
+  if (!user) return { ok: false, response: unauthorized() };
+  return { ok: true, user };
 }
 
 function escapeXml(s: string): string {
@@ -81,14 +133,7 @@ function bookEntry(b: {
 }): string {
   const title = b.title ?? b.fileName;
   const author = b.authors.join(", ") || "Unknown";
-  const mime =
-    b.bookType === "PDF"
-      ? "application/pdf"
-      : b.bookType === "EPUB"
-        ? "application/epub+zip"
-        : b.bookType === "CBX"
-          ? "application/x-cbz"
-          : "application/octet-stream";
+  const mime = mimeForBookType(b.bookType);
   return `<entry>
     <title>${escapeXml(title)}</title>
     <id>urn:tsundoku:book:${b.id}</id>
@@ -97,6 +142,95 @@ function bookEntry(b: {
     <link rel="http://opds-spec.org/image/thumbnail" href="/api/v1/books/${b.id}/cover" type="image/jpeg"/>
     <link rel="http://opds-spec.org/acquisition" href="/api/v1/files/${b.id}/stream" type="${mime}"/>
   </entry>`;
+}
+
+function mimeForBookType(bookType: string): string {
+  return OPDS_MIME_BY_BOOK_TYPE[bookType] ?? "application/octet-stream";
+}
+
+function navigationEntry(opts: {
+  title: string;
+  id: string;
+  href?: string;
+  kind?: "navigation" | "acquisition";
+  content?: string;
+}): string {
+  const link = opts.href
+    ? `\n  <link rel="subsection" href="${escapeXml(opts.href)}" type="application/atom+xml;profile=opds-catalog;kind=${opts.kind ?? "navigation"}"/>`
+    : "";
+  const content = opts.content ? `\n  <content type="text">${escapeXml(opts.content)}</content>` : "";
+
+  return `<entry>
+  <title>${escapeXml(opts.title)}</title>
+  <id>${escapeXml(opts.id)}</id>
+  <updated>${new Date().toISOString()}</updated>${link}${content}
+</entry>`;
+}
+
+function libraryEntry(library: { id: string; name: string }): string {
+  return navigationEntry({
+    title: library.name,
+    id: `urn:tsundoku:library:${library.id}`,
+    href: `/api/v1/opds/libraries/${library.id}`,
+    kind: "acquisition",
+  });
+}
+
+function authorEntry(author: { id: string; name: string; bookCount: number }): string {
+  return navigationEntry({
+    title: author.name,
+    id: `urn:tsundoku:author:${author.id}`,
+    content: `${author.bookCount} books`,
+  });
+}
+
+function seriesEntry(series: { name: string; bookCount: number }): string {
+  return navigationEntry({
+    title: series.name,
+    id: `urn:tsundoku:series:${encodeURIComponent(series.name)}`,
+    href: `/api/v1/opds/series/${encodeURIComponent(series.name)}`,
+    kind: "acquisition",
+    content: `${series.bookCount} books`,
+  });
+}
+
+function shelfEntry(shelf: { id: string; name: string; bookCount: number }): string {
+  return navigationEntry({
+    title: shelf.name,
+    id: `urn:tsundoku:shelf:${shelf.id}`,
+    href: `/api/v1/opds/shelves/${shelf.id}`,
+    kind: "acquisition",
+    content: `${shelf.bookCount} books`,
+  });
+}
+
+function batchBookEntry(b: {
+  id: string;
+  fileName: string;
+  bookType: string;
+  title: string | null;
+  authors?: string[];
+}): string {
+  return bookEntry({
+    id: b.id,
+    fileName: b.fileName,
+    bookType: b.bookType,
+    addedOn: new Date(),
+    title: b.title,
+    authors: b.authors ?? [],
+  });
+}
+
+async function allowedSeriesLibraries(user: AuthenticatedUser): Promise<string[] | "all"> {
+  if (user.permissions.admin) return "all";
+
+  const db = requireDb();
+  const rows = await db
+    .select({ libraryId: schema.userLibraryMapping.libraryId })
+    .from(schema.userLibraryMapping)
+    .where(eq(schema.userLibraryMapping.userId, user.id));
+
+  return rows.map((r) => r.libraryId);
 }
 
 const xmlResponse = (body: string, kind: "navigation" | "acquisition" = "navigation") =>
@@ -115,59 +249,23 @@ const unauthorized = () =>
 
 export const opdsRoutes = new Hono()
   .get("/opds", async (c) => {
-    const user = await basicAuth(c.req.header("Authorization"));
-    if (!user) return unauthorized();
+    const auth = await authenticate(c);
+    if (!auth.ok) return auth.response;
+
     return xmlResponse(
       feed({
         id: "urn:tsundoku:catalog:root",
         title: "tsundoku",
         self: "/api/v1/opds",
-        entries: [
-          `<entry>
-    <title>Recent</title>
-    <id>urn:tsundoku:catalog:recent</id>
-    <updated>${new Date().toISOString()}</updated>
-    <link rel="subsection" href="/api/v1/opds/recent" type="application/atom+xml;profile=opds-catalog;kind=acquisition"/>
-    <content type="text">Newest additions</content>
-  </entry>`,
-          `<entry>
-    <title>Libraries</title>
-    <id>urn:tsundoku:catalog:libraries</id>
-    <updated>${new Date().toISOString()}</updated>
-    <link rel="subsection" href="/api/v1/opds/libraries" type="application/atom+xml;profile=opds-catalog;kind=navigation"/>
-  </entry>`,
-          `<entry>
-    <title>Authors</title>
-    <id>urn:tsundoku:catalog:authors</id>
-    <updated>${new Date().toISOString()}</updated>
-    <link rel="subsection" href="/api/v1/opds/authors" type="application/atom+xml;profile=opds-catalog;kind=navigation"/>
-  </entry>`,
-          `<entry>
-    <title>Shelves</title>
-    <id>urn:tsundoku:catalog:shelves</id>
-    <updated>${new Date().toISOString()}</updated>
-    <link rel="subsection" href="/api/v1/opds/shelves" type="application/atom+xml;profile=opds-catalog;kind=navigation"/>
-  </entry>`,
-          `<entry>
-    <title>In progress</title>
-    <id>urn:tsundoku:catalog:in-progress</id>
-    <updated>${new Date().toISOString()}</updated>
-    <link rel="subsection" href="/api/v1/opds/in-progress" type="application/atom+xml;profile=opds-catalog;kind=acquisition"/>
-    <content type="text">Books you've started but not finished</content>
-  </entry>`,
-          `<entry>
-    <title>Series</title>
-    <id>urn:tsundoku:catalog:series</id>
-    <updated>${new Date().toISOString()}</updated>
-    <link rel="subsection" href="/api/v1/opds/series" type="application/atom+xml;profile=opds-catalog;kind=navigation"/>
-  </entry>`,
-        ],
+        entries: OPDS_ROOT_SECTIONS.map(navigationEntry),
       }),
     );
   })
   .get("/opds/recent", async (c) => {
-    const user = await basicAuth(c.req.header("Authorization"));
-    if (!user) return unauthorized();
+    const auth = await authenticate(c);
+    if (!auth.ok) return auth.response;
+    const user = auth.user;
+
     const books = await listBooks(user.id, user.permissions.admin, { size: 50 });
     return xmlResponse(
       feed({
@@ -181,28 +279,25 @@ export const opdsRoutes = new Hono()
     );
   })
   .get("/opds/libraries", async (c) => {
-    const user = await basicAuth(c.req.header("Authorization"));
-    if (!user) return unauthorized();
+    const auth = await authenticate(c);
+    if (!auth.ok) return auth.response;
+    const user = auth.user;
+
     const libs = await listLibrariesForUser(user.id, user.permissions.admin);
     return xmlResponse(
       feed({
         id: "urn:tsundoku:catalog:libraries",
         title: "Libraries",
         self: "/api/v1/opds/libraries",
-        entries: libs.map(
-          (l) => `<entry>
-    <title>${escapeXml(l.name)}</title>
-    <id>urn:tsundoku:library:${l.id}</id>
-    <updated>${new Date().toISOString()}</updated>
-    <link rel="subsection" href="/api/v1/opds/libraries/${l.id}" type="application/atom+xml;profile=opds-catalog;kind=acquisition"/>
-  </entry>`,
-        ),
+        entries: libs.map(libraryEntry),
       }),
     );
   })
   .get("/opds/libraries/:id", async (c) => {
-    const user = await basicAuth(c.req.header("Authorization"));
-    if (!user) return unauthorized();
+    const auth = await authenticate(c);
+    if (!auth.ok) return auth.response;
+    const user = auth.user;
+
     const id = c.req.param("id");
     if (!id) return new Response("Bad id", { status: 400 });
     const books = await listBooks(user.id, user.permissions.admin, {
@@ -221,69 +316,53 @@ export const opdsRoutes = new Hono()
     );
   })
   .get("/opds/authors", async (c) => {
-    const user = await basicAuth(c.req.header("Authorization"));
-    if (!user) return unauthorized();
+    const auth = await authenticate(c);
+    if (!auth.ok) return auth.response;
+
     const authors = await listAuthors();
     return xmlResponse(
       feed({
         id: "urn:tsundoku:catalog:authors",
         title: "Authors",
         self: "/api/v1/opds/authors",
-        entries: authors.map(
-          (a) => `<entry>
-    <title>${escapeXml(a.name)}</title>
-    <id>urn:tsundoku:author:${a.id}</id>
-    <updated>${new Date().toISOString()}</updated>
-    <content type="text">${a.bookCount} books</content>
-  </entry>`,
-        ),
+        entries: authors.map(authorEntry),
       }),
     );
   })
   .get("/opds/series", async (c) => {
-    const user = await basicAuth(c.req.header("Authorization"));
-    if (!user) return unauthorized();
+    const auth = await authenticate(c);
+    if (!auth.ok) return auth.response;
+
     const series = await listSeries();
     return xmlResponse(
       feed({
         id: "urn:tsundoku:catalog:series",
         title: "Series",
         self: "/api/v1/opds/series",
-        entries: series.map(
-          (s) => `<entry>
-    <title>${escapeXml(s.name)}</title>
-    <id>urn:tsundoku:series:${encodeURIComponent(s.name)}</id>
-    <updated>${new Date().toISOString()}</updated>
-    <content type="text">${s.bookCount} books</content>
-  </entry>`,
-        ),
+        entries: series.map(seriesEntry),
       }),
     );
   })
   .get("/opds/shelves", async (c) => {
-    const user = await basicAuth(c.req.header("Authorization"));
-    if (!user) return unauthorized();
+    const auth = await authenticate(c);
+    if (!auth.ok) return auth.response;
+    const user = auth.user;
+
     const shelves = await listShelves(user.id);
     return xmlResponse(
       feed({
         id: "urn:tsundoku:catalog:shelves",
         title: "Shelves",
         self: "/api/v1/opds/shelves",
-        entries: shelves.map(
-          (s) => `<entry>
-    <title>${escapeXml(s.name)}</title>
-    <id>urn:tsundoku:shelf:${s.id}</id>
-    <updated>${new Date().toISOString()}</updated>
-    <link rel="subsection" href="/api/v1/opds/shelves/${s.id}" type="application/atom+xml;profile=opds-catalog;kind=acquisition"/>
-    <content type="text">${s.bookCount} books</content>
-  </entry>`,
-        ),
+        entries: shelves.map(shelfEntry),
       }),
     );
   })
   .get("/opds/shelves/:id", async (c) => {
-    const user = await basicAuth(c.req.header("Authorization"));
-    if (!user) return unauthorized();
+    const auth = await authenticate(c);
+    if (!auth.ok) return auth.response;
+    const user = auth.user;
+
     const id = c.req.param("id");
     if (!id) return new Response("Bad id", { status: 400 });
     const bookIds = await getShelfBookIds(user.id, id);
@@ -294,23 +373,16 @@ export const opdsRoutes = new Hono()
         title: "Shelf",
         self: `/api/v1/opds/shelves/${id}`,
         kind: "acquisition",
-        entries: books.map((b) =>
-          bookEntry({
-            id: b.id,
-            fileName: b.fileName,
-            bookType: b.bookType,
-            addedOn: new Date(),
-            title: b.title,
-            authors: b.authors,
-          }),
-        ),
+        entries: books.map(batchBookEntry),
       }),
       "acquisition",
     );
   })
   .get("/opds/in-progress", async (c) => {
-    const user = await basicAuth(c.req.header("Authorization"));
-    if (!user) return unauthorized();
+    const auth = await authenticate(c);
+    if (!auth.ok) return auth.response;
+    const user = auth.user;
+
     const db = requireDb();
     const rows = await db
       .select({ bookId: schema.userBookProgress.bookId })
@@ -328,37 +400,22 @@ export const opdsRoutes = new Hono()
         title: "In progress",
         self: "/api/v1/opds/in-progress",
         kind: "acquisition",
-        entries: books.map((b) =>
-          bookEntry({
-            id: b.id,
-            fileName: b.fileName,
-            bookType: b.bookType,
-            addedOn: new Date(),
-            title: b.title,
-            authors: b.authors,
-          }),
-        ),
+        entries: books.map(batchBookEntry),
       }),
       "acquisition",
     );
   })
   .get("/opds/series/:name", async (c) => {
-    const user = await basicAuth(c.req.header("Authorization"));
-    if (!user) return unauthorized();
+    const auth = await authenticate(c);
+    if (!auth.ok) return auth.response;
+    const user = auth.user;
+
     const raw = c.req.param("name");
     if (!raw) return new Response("Bad series", { status: 400 });
     const name = decodeURIComponent(raw);
     // OPDS shouldn't enforce per-library ACLs the same way the JSON API does;
     // we still scope to the user's allowed libraries.
-    const allowedSet = await (async () => {
-      if (user.permissions.admin) return "all" as const;
-      const db = requireDb();
-      const rows = await db
-        .select({ libraryId: schema.userLibraryMapping.libraryId })
-        .from(schema.userLibraryMapping)
-        .where(eq(schema.userLibraryMapping.userId, user.id));
-      return rows.map((r) => r.libraryId);
-    })();
+    const allowedSet = await allowedSeriesLibraries(user);
     const books = await getSeriesBooks(name, allowedSet);
     return xmlResponse(
       feed({
@@ -366,27 +423,18 @@ export const opdsRoutes = new Hono()
         title: name,
         self: `/api/v1/opds/series/${encodeURIComponent(name)}`,
         kind: "acquisition",
-        entries: books.map((b) =>
-          bookEntry({
-            id: b.id,
-            fileName: b.fileName,
-            bookType: b.bookType,
-            addedOn: new Date(),
-            title: b.title,
-            authors: [],
-          }),
-        ),
+        entries: books.map(batchBookEntry),
       }),
       "acquisition",
     );
   })
   .get("/opds/search", async (c) => {
-    const user = await basicAuth(c.req.header("Authorization"));
-    if (!user) return unauthorized();
+    const auth = await authenticate(c);
+    if (!auth.ok) return auth.response;
+    const user = auth.user;
+
     const q = c.req.query("q") ?? "";
-    const books = q
-      ? await listBooks(user.id, user.permissions.admin, { search: q, size: 100 })
-      : { content: [] as Awaited<ReturnType<typeof listBooks>>["content"] };
+    const books = await searchBooksForOpds(user, q);
     return xmlResponse(
       feed({
         id: `urn:tsundoku:catalog:search:${encodeURIComponent(q)}`,
@@ -398,3 +446,8 @@ export const opdsRoutes = new Hono()
       "acquisition",
     );
   });
+
+async function searchBooksForOpds(user: AuthenticatedUser, q: string) {
+  if (!q) return { content: [] as Awaited<ReturnType<typeof listBooks>>["content"] };
+  return listBooks(user.id, user.permissions.admin, { search: q, size: 100 });
+}

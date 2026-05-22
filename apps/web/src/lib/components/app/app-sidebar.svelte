@@ -74,6 +74,7 @@
   // Persisted open/closed state for each collapsible group. Default to open.
   type GroupKey = "libraries" | "shelves" | "magic" | "add";
   const STORAGE_PREFIX = "tsundoku-sidebar-";
+  const GROUP_KEYS: GroupKey[] = ["libraries", "shelves", "magic", "add"];
   const defaultOpen: Record<GroupKey, boolean> = {
     libraries: true,
     shelves: true,
@@ -82,53 +83,85 @@
   };
   let open = $state<Record<GroupKey, boolean>>({ ...defaultOpen });
 
-  // Auto-open a group when one of its routes is active, so users don't lose
-  // context. $effect-based so it re-applies on every navigation, not just
-  // first paint.
-  const librariesHasActive = $derived(
-    isActive("/libraries") || libraries.some((l) => isActive(`/libraries/${l.id}`)),
-  );
-  const shelvesHasActive = $derived(
-    isActive("/shelves") || shelves.some((s) => isActive(`/shelves/${s.id}`)),
-  );
-  const magicHasActive = $derived(
-    isActive("/magic-shelves") ||
-      magicShelves.some((s) => isActive(`/magic-shelves/${s.id}`)),
-  );
-  const addHasActive = $derived(isActive("/upload") || isActive("/bookdrop"));
+  function readStoredOpen(key: GroupKey): boolean | null {
+    try {
+      const value = localStorage.getItem(STORAGE_PREFIX + key);
+      if (value === "1") return true;
+      if (value === "0") return false;
+    } catch {
+      // ignore
+    }
+    return null;
+  }
 
-  onMount(() => {
-    (Object.keys(defaultOpen) as GroupKey[]).forEach((k) => {
-      try {
-        const v = localStorage.getItem(STORAGE_PREFIX + k);
-        if (v === "1") open[k] = true;
-        else if (v === "0") open[k] = false;
-      } catch {
-        // ignore
-      }
-    });
-  });
-
-  $effect(() => {
-    if (librariesHasActive) open.libraries = true;
-  });
-  $effect(() => {
-    if (shelvesHasActive) open.shelves = true;
-  });
-  $effect(() => {
-    if (magicHasActive) open.magic = true;
-  });
-  $effect(() => {
-    if (addHasActive) open.add = true;
-  });
-
-  function toggle(key: GroupKey) {
-    open[key] = !open[key];
+  function writeStoredOpen(key: GroupKey) {
     try {
       localStorage.setItem(STORAGE_PREFIX + key, open[key] ? "1" : "0");
     } catch {
       // ignore
     }
+  }
+
+  function navLinkClass(active: boolean): string {
+    return cn(
+      "group flex items-center gap-3 rounded-md px-2.5 py-1.5 text-sm transition-colors",
+      active
+        ? "bg-sidebar-accent text-sidebar-accent-foreground font-medium"
+        : "text-sidebar-foreground/80 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
+    );
+  }
+
+  function rowClass(active: boolean): string {
+    return cn(
+      "group/row flex items-center rounded-md transition-colors",
+      active
+        ? "bg-sidebar-accent text-sidebar-accent-foreground"
+        : "text-sidebar-foreground/80 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
+    );
+  }
+
+  function countClass(active: boolean): string {
+    return cn(
+      "font-mono text-[10px] tabular-nums tracking-wide",
+      active ? "text-sidebar-accent-foreground/80" : "text-muted-foreground",
+    );
+  }
+
+  function groupPanelClass(key: GroupKey): string {
+    return cn(
+      "grid overflow-hidden transition-[grid-template-rows] duration-200 ease-out",
+      open[key] ? "grid-rows-[1fr]" : "grid-rows-[0fr]",
+    );
+  }
+
+  // Auto-open a group when one of its routes is active, so users don't lose
+  // context. $effect-based so it re-applies on every navigation, not just
+  // first paint.
+  const activeGroups = $derived({
+    libraries:
+      isActive("/libraries") || libraries.some((library) => isActive(`/libraries/${library.id}`)),
+    shelves: isActive("/shelves") || shelves.some((shelf) => isActive(`/shelves/${shelf.id}`)),
+    magic:
+      isActive("/magic-shelves") ||
+      magicShelves.some((shelf) => isActive(`/magic-shelves/${shelf.id}`)),
+    add: isActive("/upload") || isActive("/bookdrop"),
+  });
+
+  onMount(() => {
+    for (const key of GROUP_KEYS) {
+      open[key] = readStoredOpen(key) ?? defaultOpen[key];
+    }
+  });
+
+  $effect(() => {
+    for (const key of GROUP_KEYS) {
+      if (activeGroups[key]) open[key] = true;
+    }
+  });
+
+  function toggle(key: GroupKey) {
+    open[key] = !open[key];
+    writeStoredOpen(key);
   }
 </script>
 
@@ -176,24 +209,14 @@
       {@const Icon = icon}
       <a
         {href}
-        class={cn(
-          "group flex items-center gap-3 rounded-md px-2.5 py-1.5 text-sm transition-colors",
-          active
-            ? "bg-sidebar-accent text-sidebar-accent-foreground font-medium"
-            : "text-sidebar-foreground/80 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
-        )}
+        class={navLinkClass(active)}
         aria-current={active ? "page" : undefined}
         onclick={() => onCloseMobile?.()}
       >
         <Icon size={15} class="shrink-0 opacity-80 group-hover:opacity-100" />
         <span class="flex-1 truncate">{label}</span>
         {#if count !== undefined && count !== null}
-          <span
-            class={cn(
-              "font-mono text-[10px] tabular-nums tracking-wide",
-              active ? "text-sidebar-accent-foreground/80" : "text-muted-foreground",
-            )}
-          >
+          <span class={countClass(active)}>
             {count}
           </span>
         {/if}
@@ -203,14 +226,7 @@
     {#snippet magicShelfRow(s: SidebarShelf)}
       {@const href = `/magic-shelves/${s.id}`}
       {@const active = isActive(href)}
-      <div
-        class={cn(
-          "group/row flex items-center rounded-md transition-colors",
-          active
-            ? "bg-sidebar-accent text-sidebar-accent-foreground"
-            : "text-sidebar-foreground/80 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
-        )}
-      >
+      <div class={rowClass(active)}>
         <a
           {href}
           class="flex flex-1 items-center gap-3 rounded-md px-2.5 py-1.5 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring"
@@ -220,12 +236,7 @@
           <Sparkles size={15} class="shrink-0 opacity-80" />
           <span class={cn("flex-1 truncate", active && "font-medium")}>{s.name}</span>
           {#if s.count !== undefined && s.count !== null}
-            <span
-              class={cn(
-                "font-mono text-[10px] tabular-nums tracking-wide",
-                active ? "text-sidebar-accent-foreground/80" : "text-muted-foreground",
-              )}
-            >
+            <span class={countClass(active)}>
               {s.count}
             </span>
           {/if}
@@ -343,10 +354,7 @@
       )}
       <div
         id="sidebar-group-libraries"
-        class={cn(
-          "grid overflow-hidden transition-[grid-template-rows] duration-200 ease-out",
-          open.libraries ? "grid-rows-[1fr]" : "grid-rows-[0fr]",
-        )}
+        class={groupPanelClass("libraries")}
       >
         <div class="min-h-0 overflow-hidden">
           <div class="mt-1 space-y-0.5">
@@ -368,10 +376,7 @@
       )}
       <div
         id="sidebar-group-shelves"
-        class={cn(
-          "grid overflow-hidden transition-[grid-template-rows] duration-200 ease-out",
-          open.shelves ? "grid-rows-[1fr]" : "grid-rows-[0fr]",
-        )}
+        class={groupPanelClass("shelves")}
       >
         <div class="min-h-0 overflow-hidden">
           <div class="mt-1 space-y-0.5">
@@ -393,10 +398,7 @@
       )}
       <div
         id="sidebar-group-magic"
-        class={cn(
-          "grid overflow-hidden transition-[grid-template-rows] duration-200 ease-out",
-          open.magic ? "grid-rows-[1fr]" : "grid-rows-[0fr]",
-        )}
+        class={groupPanelClass("magic")}
       >
         <div class="min-h-0 overflow-hidden">
           <div class="mt-1 space-y-0.5">
@@ -413,10 +415,7 @@
       {@render collapsibleGroupHeader("add", "Add", null)}
       <div
         id="sidebar-group-add"
-        class={cn(
-          "grid overflow-hidden transition-[grid-template-rows] duration-200 ease-out",
-          open.add ? "grid-rows-[1fr]" : "grid-rows-[0fr]",
-        )}
+        class={groupPanelClass("add")}
       >
         <div class="min-h-0 overflow-hidden">
           <div class="mt-1 space-y-0.5">
