@@ -2,8 +2,8 @@
   import Plus from "@lucide/svelte/icons/plus";
   import Trash2 from "@lucide/svelte/icons/trash-2";
   import * as Select from "$lib/components/ui/select";
-  import { Input } from "$lib/components/ui/input";
   import { cn } from "$lib/utils";
+  import RuleValueInput from "./RuleValueInput.svelte";
   import {
     EMPTY_RULES,
     FIELDS,
@@ -11,7 +11,6 @@
     OPERATOR_LABELS,
     fieldMeta,
     isLeaf,
-    type FieldMeta,
     type FieldName,
     type GroupRule,
     type LeafRule,
@@ -97,64 +96,6 @@
   function joinButtonClass(join: "and" | "or"): string {
     if (rules.join === join) return "bg-primary text-primary-foreground";
     return "text-muted-foreground hover:bg-muted hover:text-foreground";
-  }
-
-  function enumLabel(meta: FieldMeta | undefined, value: unknown): string {
-    const selectedValue = String(value ?? "");
-    return meta?.options?.find((option) => option.value === selectedValue)?.label ?? "—";
-  }
-
-  function scalarInputType(meta: FieldMeta | undefined): "date" | "number" {
-    if (meta?.kind === "date") return "date";
-    return "number";
-  }
-
-  function singleValueDisplay(rule: LeafRule): string {
-    if (rule.value == null) return "";
-    return String(rule.value);
-  }
-
-  function parseNumericInput(raw: string): number | null {
-    if (raw === "") return null;
-    return Number(raw);
-  }
-
-  function parseScalarInput(meta: FieldMeta | undefined, raw: string): string | number | null {
-    if (meta?.kind === "date") return raw;
-    return parseNumericInput(raw);
-  }
-
-  function updateSingleInput(index: number, meta: FieldMeta | undefined, raw: string) {
-    if (meta?.kind === "number") {
-      updateRule(index, { value: parseNumericInput(raw) });
-      return;
-    }
-    updateRule(index, { value: raw });
-  }
-
-  function updateRangeStart(index: number, meta: FieldMeta | undefined, raw: string) {
-    updateRule(index, { valueStart: parseScalarInput(meta, raw) });
-  }
-
-  function updateRangeEnd(index: number, meta: FieldMeta | undefined, raw: string) {
-    updateRule(index, { valueEnd: parseScalarInput(meta, raw) });
-  }
-
-  // Comma-separated list values get split client-side so the evaluator gets
-  // a plain string[]. A real multi-select needs server-fed suggestions we
-  // haven't plumbed yet.
-  function setListValue(index: number, raw: string) {
-    const items = raw
-      .split(",")
-      .map((s) => s.trim())
-      .filter(Boolean);
-    updateRule(index, { value: items });
-  }
-
-  function listValueDisplay(rule: LeafRule): string {
-    if (Array.isArray(rule.value)) return rule.value.join(", ");
-    if (rule.value == null) return "";
-    return String(rule.value);
   }
 
   if (!rules || !rules.type) {
@@ -245,87 +186,12 @@
 
         <!-- Value cell — morphs by operator + field kind. -->
         <div class="min-w-0">
-          {#if valueMode === "none"}
-            <span class="font-mono text-[11px] italic text-muted-foreground/70">— no value —</span>
-          {:else if valueMode === "range"}
-            <div class="flex items-center gap-2">
-              <Input
-                type={scalarInputType(meta)}
-                step="any"
-                class="h-8 flex-1 text-xs"
-                value={rule.valueStart == null ? "" : String(rule.valueStart)}
-                oninput={(e) => {
-                  const raw = (e.currentTarget as HTMLInputElement).value;
-                  updateRangeStart(i, meta, raw);
-                }}
-                aria-label="From"
-              />
-              <span class="font-mono text-xs text-muted-foreground">to</span>
-              <Input
-                type={scalarInputType(meta)}
-                step="any"
-                class="h-8 flex-1 text-xs"
-                value={rule.valueEnd == null ? "" : String(rule.valueEnd)}
-                oninput={(e) => {
-                  const raw = (e.currentTarget as HTMLInputElement).value;
-                  updateRangeEnd(i, meta, raw);
-                }}
-                aria-label="To"
-              />
-            </div>
-          {:else if valueMode === "list"}
-            <Input
-              type="text"
-              class="h-8 text-xs"
-              placeholder="comma-separated"
-              value={listValueDisplay(rule)}
-              oninput={(e) => setListValue(i, (e.currentTarget as HTMLInputElement).value)}
-              aria-label="Values"
-            />
-          {:else if meta?.kind === "enum"}
-            <Select.Root
-              type="single"
-              value={String(rule.value ?? "")}
-              onValueChange={(v) => v != null && updateRule(i, { value: v })}
-            >
-              <Select.Trigger class="h-8 w-full text-xs">
-                {enumLabel(meta, rule.value)}
-              </Select.Trigger>
-              <Select.Content>
-                {#each meta.options ?? [] as opt (opt.value)}
-                  <Select.Item value={opt.value} label={opt.label}>{opt.label}</Select.Item>
-                {/each}
-              </Select.Content>
-            </Select.Root>
-          {:else if meta?.kind === "number"}
-            <Input
-              type="number"
-              step="any"
-              class="h-8 text-xs"
-              value={singleValueDisplay(rule)}
-              oninput={(e) => {
-                const raw = (e.currentTarget as HTMLInputElement).value;
-                updateSingleInput(i, meta, raw);
-              }}
-              aria-label="Value"
-            />
-          {:else if meta?.kind === "date"}
-            <Input
-              type="date"
-              class="h-8 text-xs"
-              value={typeof rule.value === "string" ? rule.value : ""}
-              oninput={(e) => updateRule(i, { value: (e.currentTarget as HTMLInputElement).value })}
-              aria-label="Value"
-            />
-          {:else}
-            <Input
-              type="text"
-              class="h-8 text-xs"
-              value={singleValueDisplay(rule)}
-              oninput={(e) => updateRule(i, { value: (e.currentTarget as HTMLInputElement).value })}
-              aria-label="Value"
-            />
-          {/if}
+          <RuleValueInput
+            {rule}
+            {meta}
+            mode={valueMode}
+            onPatch={(patch) => updateRule(i, patch)}
+          />
         </div>
 
         <button

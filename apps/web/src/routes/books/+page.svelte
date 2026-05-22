@@ -8,17 +8,23 @@
   import { Label } from "$lib/components/ui/label";
   import { Button } from "$lib/components/ui/button";
   import * as Select from "$lib/components/ui/select";
-  import LibrarySection from "$lib/components/library/library-section.svelte";
-  import BookListRow from "$lib/components/library/book-list-row.svelte";
-  import BookCard from "$lib/components/library/book-card.svelte";
-  import InfiniteList from "$lib/components/library/infinite-list.svelte";
   import DensityToggle, {
     type Density,
   } from "$lib/components/library/density-toggle.svelte";
+  import BooksResults from "$lib/components/library/books-results.svelte";
+  import {
+    FORMAT_LABELS,
+    SORT_LABELS,
+    activeBookFilters,
+    appendUniqueBooks,
+    buildBookPageParams,
+    groupBooksByLibrary,
+    isDensity,
+    type BooksPageBook,
+    type SidebarLibrary,
+  } from "$lib/books-page";
 
   let { data }: { data: PageData } = $props();
-
-  type Book = (typeof data.books.content)[number];
 
   // Filter form is seeded from data.filter on each navigation. SvelteKit
   // creates a new component instance on form submission, so $state(...) captures
@@ -28,30 +34,13 @@
   let bookType = $state(data.filter.bookType);
   let sortValue = $state(data.filter.sort);
 
-  const formatLabels: Record<string, string> = {
-    "": "All",
-    PDF: "PDF",
-    EPUB: "EPUB",
-    CBX: "CBZ",
-    MOBI: "MOBI",
-    AZW3: "AZW3",
-    FB2: "FB2",
-    AUDIOBOOK: "Audiobook",
-  };
-  const sortLabels: Record<string, string> = {
-    addedOn: "Added",
-    title: "Title",
-    rating: "Rating",
-    pageCount: "Pages",
-  };
-
   // Density: persisted to localStorage so a librarian-mode preference survives
   // navigation. Mount-only read; SSR renders the default to avoid hydration churn.
   let density = $state<Density>("grid");
   onMount(() => {
     try {
       const stored = localStorage.getItem("tsundoku-density");
-      if (stored === "grid" || stored === "list") density = stored;
+      if (isDensity(stored)) density = stored;
     } catch {
       // ignore
     }
@@ -68,7 +57,7 @@
   // the first page; the InfiniteList triggers subsequent pages via /books
   // +server.ts. When filters change, SvelteKit re-runs the loader and the
   // component remounts, so this state re-initializes from the fresh page.
-  let items = $state<Book[]>([...data.books.content]);
+  let items = $state<BooksPageBook[]>([...data.books.content]);
   const total = $derived(data.books.totalElements);
   let nextPage = $state(1); // page 0 already loaded by the server loader
   let isLoading = $state(false);
@@ -78,23 +67,17 @@
     if (items.length >= total) return;
     isLoading = true;
     try {
-      const params = new URLSearchParams({
-        page: String(nextPage),
-        size: String(data.books.size),
+      const params = buildBookPageParams({
+        page: nextPage,
+        size: data.books.size,
+        filter: data.filter,
       });
-      for (const [k, v] of Object.entries(data.filter)) {
-        if (v) params.set(k, v);
-      }
       const res = await fetch(`/books?${params.toString()}`, {
         headers: { Accept: "application/json" },
       });
       if (!res.ok) throw new Error(`books page fetch failed: ${res.status}`);
       const body = (await res.json()) as typeof data.books;
-      // Append uniquely (defensive; same id shouldn't repeat across pages).
-      const seen = new Set(items.map((b) => b.id));
-      for (const b of body.content) {
-        if (!seen.has(b.id)) items.push(b);
-      }
+      items = appendUniqueBooks(items, body.content);
       nextPage += 1;
     } finally {
       isLoading = false;
@@ -105,34 +88,15 @@
   // active, books get grouped under their parent library; otherwise one flat
   // section is rendered.
   const sidebarLibraries = $derived(
-    (page.data?.sidebar?.libraries ?? []) as { id: number | string; name: string }[],
+    (page.data?.sidebar?.libraries ?? []) as SidebarLibrary[],
   );
 
   const grouped = $derived.by(() => {
-    if (data.filter.libraryId) return null;
-    const libById = new Map<string, { id: number | string; name: string; books: Book[] }>();
-    for (const lib of sidebarLibraries) {
-      libById.set(String(lib.id), { id: lib.id, name: lib.name, books: [] });
-    }
-    const orphans: Book[] = [];
-    for (const b of items as Array<Book & { libraryId?: string }>) {
-      const key = b.libraryId != null ? String(b.libraryId) : null;
-      if (key && libById.has(key)) libById.get(key)!.books.push(b);
-      else orphans.push(b);
-    }
-    const groups = Array.from(libById.values()).filter((g) => g.books.length > 0);
-    return { groups, orphans };
+    return groupBooksByLibrary(items, sidebarLibraries, data.filter.libraryId);
   });
 
   const activeFilters = $derived.by(() => {
-    const out: { key: string; label: string }[] = [];
-    if (data.filter.search) out.push({ key: "search", label: `“${data.filter.search}”` });
-    if (data.filter.bookType) out.push({ key: "bookType", label: data.filter.bookType });
-    if (data.filter.libraryId) {
-      const lib = sidebarLibraries.find((l) => String(l.id) === data.filter.libraryId);
-      out.push({ key: "libraryId", label: lib?.name ?? "Library" });
-    }
-    return out;
+    return activeBookFilters(data.filter, sidebarLibraries);
   });
 </script>
 
@@ -182,10 +146,10 @@
         </Label>
         <Select.Root type="single" bind:value={bookType}>
           <Select.Trigger id="bookType-trigger" class="h-9 w-36">
-            {formatLabels[bookType] ?? "All"}
+            {FORMAT_LABELS[bookType] ?? "All"}
           </Select.Trigger>
           <Select.Content>
-            {#each Object.entries(formatLabels) as [value, label] (value)}
+            {#each Object.entries(FORMAT_LABELS) as [value, label] (value)}
               <Select.Item {value} {label}>{label}</Select.Item>
             {/each}
           </Select.Content>
@@ -200,10 +164,10 @@
         </Label>
         <Select.Root type="single" bind:value={sortValue}>
           <Select.Trigger id="sort-trigger" class="h-9 w-32">
-            {sortLabels[sortValue] ?? "Added"}
+            {SORT_LABELS[sortValue] ?? "Added"}
           </Select.Trigger>
           <Select.Content>
-            {#each Object.entries(sortLabels) as [value, label] (value)}
+            {#each Object.entries(SORT_LABELS) as [value, label] (value)}
               <Select.Item {value} {label}>{label}</Select.Item>
             {/each}
           </Select.Content>
@@ -241,65 +205,6 @@
   </form>
 
   <div id="results" tabindex="-1">
-    {#if items.length === 0}
-      <div
-        class="rounded-lg border border-dashed border-border bg-card/50 px-6 py-16 text-center"
-      >
-        <p class="font-display text-xl">Nothing matches.</p>
-        <p class="mt-1 text-sm text-muted-foreground">
-          Try a different search or
-          <a href="/books" class="font-medium text-foreground underline-offset-4 hover:underline">
-            clear the filters</a
-          >.
-        </p>
-      </div>
-    {:else}
-      <InfiniteList {total} loaded={items.length} {isLoading} label="books" onLoadMore={loadMore}>
-        {#if grouped && grouped.groups.length > 0}
-          <!-- Grouped by library when no library filter is active -->
-          <div class="space-y-10">
-            {#each grouped.groups as g (g.id)}
-              <LibrarySection library={g} books={g.books} {density} />
-            {/each}
-            {#if grouped.orphans.length > 0}
-              <LibrarySection
-                library={{ id: "orphan", name: "Other" }}
-                books={grouped.orphans}
-                {density}
-              />
-            {/if}
-          </div>
-        {:else}
-          <!-- Flat: either a library filter is active, or no library data is available.
-               aria-setsize uses the server total so SR position announcements stay
-               truthful even as items append. -->
-          {#if density === "grid"}
-            <ul
-              class="grid grid-cols-2 gap-x-5 gap-y-8 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6"
-              role="list"
-              aria-label="All books"
-            >
-              {#each items as book, i (book.id)}
-                <li role="listitem" aria-posinset={i + 1} aria-setsize={total}>
-                  <BookCard {book} />
-                </li>
-              {/each}
-            </ul>
-          {:else}
-            <ul
-              class="divide-y divide-border rounded-lg border border-border bg-card/40"
-              role="list"
-              aria-label="All books"
-            >
-              {#each items as book, i (book.id)}
-                <li role="listitem" aria-posinset={i + 1} aria-setsize={total}>
-                  <BookListRow {book} />
-                </li>
-              {/each}
-            </ul>
-          {/if}
-        {/if}
-      </InfiniteList>
-    {/if}
+    <BooksResults {items} {total} {density} {grouped} {isLoading} onLoadMore={loadMore} />
   </div>
 </section>
