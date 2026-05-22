@@ -1,0 +1,21 @@
+{
+  "extends": "./.svelte-kit/tsconfig.json",
+  "compilerOptions": {
+    "allowJs": true,
+    "checkJs": true,
+    "esModuleInterop": true,
+    "forceConsistentCasingInFileNames": true,
+    "resolveJsonModule": true,
+    "skipLibCheck": true,
+    "sourceMap": true,
+    "strict": true,
+    "moduleResolution": "bundler",
+    "allowImportingTsExtensions": true,
+    "noEmit": true,
+    // Bun globals come along for the ride because we import `AppType` from the
+    // api workspace — svelte-check resolves the api's source to compute the
+    // type, and that source uses `Bun.*` in route handlers. The Bun types are
+    // ambient-only, no runtime code lands in the web bundle.
+    "types": ["bun"]
+  }
+}

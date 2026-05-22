@@ -2,14 +2,24 @@
 .github
 .idea
 .vscode
-.angular
 
-booklore-ui/node_modules
-booklore-ui/dist
-booklore-ui/.angular
-booklore-ui/test-results
+node_modules
+.turbo
+dist
+build
+.svelte-kit
+coverage
 
-booklore-api/build/reports
-booklore-api/build/test-results
+# Per-workspace build artifacts (in case of nested node_modules).
+apps/*/node_modules
+apps/*/dist
+apps/*/build
+apps/*/.svelte-kit
+packages/*/node_modules
+packages/*/dist
 
-*.md
+# Don't bundle local env / data.
+.env
+.env.*
+!.env.example
+.data

@@ -1,0 +1,118 @@
+/* Fonts — Spectral (display serif), Inter (UI sans), JetBrains Mono (operator).
+   Google Fonts for now; follow-up: vendor with @fontsource for self-hosted privacy.
+   CSS spec: @import url(...) must precede everything else. */
+@import url("https://fonts.googleapis.com/css2?family=Spectral:ital,wght@0,300;0,400;0,500;0,600;1,400&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap");
+
+@import "tailwindcss";
+@import "tw-animate-css";
+
+@custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *));
+
+@theme {
+  /* —— Reading Room · daylight ——————————————————————————— */
+  --color-background: oklch(0.972 0.014 82);
+  --color-foreground: oklch(0.205 0.008 60);
+
+  --color-card: oklch(0.985 0.010 85);
+  --color-card-foreground: oklch(0.205 0.008 60);
+
+  --color-popover: oklch(0.992 0.006 85);
+  --color-popover-foreground: oklch(0.205 0.008 60);
+
+  --color-muted: oklch(0.935 0.012 80);
+  --color-muted-foreground: oklch(0.495 0.012 70);
+
+  --color-border: oklch(0.895 0.010 75);
+  --color-input: oklch(0.895 0.010 75);
+  --color-ring: oklch(0.448 0.142 26);
+
+  --color-primary: oklch(0.448 0.142 26);
+  --color-primary-foreground: oklch(0.985 0.010 85);
+
+  --color-secondary: oklch(0.935 0.012 80);
+  --color-secondary-foreground: oklch(0.205 0.008 60);
+
+  --color-accent: oklch(0.918 0.024 70);
+  --color-accent-foreground: oklch(0.205 0.008 60);
+
+  --color-destructive: oklch(0.515 0.176 30);
+  --color-destructive-foreground: oklch(0.985 0.010 85);
+
+  --color-sidebar: oklch(0.945 0.012 80);
+  --color-sidebar-foreground: oklch(0.205 0.008 60);
+  --color-sidebar-border: oklch(0.895 0.010 75);
+  --color-sidebar-accent: oklch(0.910 0.022 70);
+  --color-sidebar-accent-foreground: oklch(0.205 0.008 60);
+  --color-sidebar-ring: oklch(0.448 0.142 26);
+
+  --radius-sm: 0.25rem;
+  --radius-md: 0.5rem;
+  --radius-lg: 0.75rem;
+
+  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-display: "Spectral", ui-serif, Georgia, serif;
+  --font-mono: "JetBrains Mono", ui-monospace, monospace;
+}
+
+@layer base {
+  /* —— Reading Room · study lamp (dark) ————————————————————— */
+  :where([data-theme="dark"]) {
+    --color-background: oklch(0.165 0.008 50);
+    --color-foreground: oklch(0.920 0.018 80);
+
+    --color-card: oklch(0.210 0.010 55);
+    --color-card-foreground: oklch(0.920 0.018 80);
+
+    --color-popover: oklch(0.225 0.012 55);
+    --color-popover-foreground: oklch(0.920 0.018 80);
+
+    --color-muted: oklch(0.225 0.010 55);
+    --color-muted-foreground: oklch(0.660 0.014 75);
+
+    --color-border: oklch(0.265 0.012 60);
+    --color-input: oklch(0.265 0.012 60);
+    --color-ring: oklch(0.708 0.118 32);
+
+    --color-primary: oklch(0.708 0.118 32);
+    --color-primary-foreground: oklch(0.165 0.008 50);
+
+    --color-secondary: oklch(0.245 0.012 58);
+    --color-secondary-foreground: oklch(0.920 0.018 80);
+
+    --color-accent: oklch(0.260 0.014 60);
+    --color-accent-foreground: oklch(0.920 0.018 80);
+
+    --color-destructive: oklch(0.638 0.196 27);
+    --color-destructive-foreground: oklch(0.985 0.010 85);
+
+    --color-sidebar: oklch(0.190 0.010 55);
+    --color-sidebar-foreground: oklch(0.920 0.018 80);
+    --color-sidebar-border: oklch(0.245 0.012 60);
+    --color-sidebar-accent: oklch(0.235 0.014 58);
+    --color-sidebar-accent-foreground: oklch(0.920 0.018 80);
+    --color-sidebar-ring: oklch(0.708 0.118 32);
+  }
+
+  html,
+  body {
+    height: 100%;
+  }
+
+  /* Smooth theme cross-fade: only the things that change between themes. */
+  html,
+  body,
+  [data-theme] {
+    transition:
+      background-color 240ms ease-out,
+      color 240ms ease-out;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      transition-duration: 0.01ms !important;
+      animation-duration: 0.01ms !important;
+    }
+  }
+}

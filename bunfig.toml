@@ -1,0 +1,11 @@
+# Bun workspace-level configuration.
+# https://bun.sh/docs/runtime/bunfig
+
+[install]
+# Use exact versions in lockfile resolution; deterministic across CI/dev.
+exact = false
+# Prefer the lockfile when present.
+frozenLockfile = false
+
+[install.scopes]
+# Add private registries here if needed.

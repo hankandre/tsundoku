@@ -1,0 +1,93 @@
+# Podman pod for the local Postgres dev instance.
+#
+#   podman play kube dev.pod.yaml          # start
+#   podman play kube --down dev.pod.yaml   # stop
+#   podman pod logs tsundoku-dev           # follow logs
+#
+# Same connection string as the compose path so .env can be shared:
+#   DATABASE_URL=postgres://tsundoku:tsundoku@localhost:5433/tsundoku
+apiVersion: v1
+kind: Pod
+metadata:
+  name: tsundoku-dev
+  labels:
+    app: tsundoku-dev
+spec:
+  containers:
+    - name: postgres
+      image: docker.io/library/postgres:17-alpine
+      ports:
+        - containerPort: 5432
+          hostPort: 5433
+      env:
+        - name: POSTGRES_DB
+          value: tsundoku
+        - name: POSTGRES_USER
+          value: tsundoku
+        - name: POSTGRES_PASSWORD
+          value: tsundoku
+      volumeMounts:
+        - name: pgdata
+          mountPath: /var/lib/postgresql/data
+      livenessProbe:
+        exec:
+          command:
+            - pg_isready
+            - -U
+            - tsundoku
+            - -d
+            - tsundoku
+        initialDelaySeconds: 5
+        periodSeconds: 10
+    - name: redis
+      image: docker.io/library/redis:7-alpine
+      args:
+        - redis-server
+        - --appendonly
+        - "yes"
+      ports:
+        - containerPort: 6379
+          hostPort: 6380
+      volumeMounts:
+        - name: redisdata
+          mountPath: /data
+      livenessProbe:
+        exec:
+          command:
+            - redis-cli
+            - ping
+        initialDelaySeconds: 5
+        periodSeconds: 10
+  volumes:
+    - name: pgdata
+      persistentVolumeClaim:
+        claimName: tsundoku_pg_dev
+    - name: redisdata
+      persistentVolumeClaim:
+        claimName: tsundoku_redis_dev
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: tsundoku_pg_dev
+  labels:
+    app: tsundoku-dev
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 1Gi
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: tsundoku_redis_dev
+  labels:
+    app: tsundoku-dev
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 256Mi

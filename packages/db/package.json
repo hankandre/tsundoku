@@ -1,0 +1,32 @@
+{
+  "name": "@tsundoku/db",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./schema": "./src/schema/index.ts",
+    "./client": "./src/client.ts"
+  },
+  "types": "./src/index.ts",
+  "scripts": {
+    "db:generate": "drizzle-kit generate",
+    "db:migrate": "drizzle-kit migrate",
+    "db:push": "drizzle-kit push",
+    "db:introspect": "drizzle-kit introspect",
+    "db:studio": "drizzle-kit studio",
+    "build": "tsc",
+    "check": "tsc --noEmit",
+    "lint": "echo 'lint: TODO'",
+    "test": "bun test",
+    "clean": "rm -rf dist .turbo drizzle/meta"
+  },
+  "dependencies": {
+    "drizzle-orm": "^0.45.2",
+    "postgres": "^3.4.7"
+  },
+  "devDependencies": {
+    "drizzle-kit": "^0.31.10",
+    "typescript": "^5.9.3"
+  }
+}

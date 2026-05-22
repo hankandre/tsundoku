@@ -1,0 +1,35 @@
+{
+  "app": {
+    "name": "tsundoku",
+    "tagline": "Your library, your shelves"
+  },
+  "nav": {
+    "dashboard": "Dashboard",
+    "libraries": "Libraries",
+    "books": "Books",
+    "authors": "Authors",
+    "series": "Series",
+    "shelves": "Shelves",
+    "upload": "Upload",
+    "bookdrop": "Bookdrop",
+    "notebook": "Notebook",
+    "admin": "Admin",
+    "signOut": "Sign out",
+    "signIn": "Sign in"
+  },
+  "common": {
+    "save": "Save",
+    "cancel": "Cancel",
+    "delete": "Delete",
+    "edit": "Edit",
+    "create": "Create",
+    "loading": "Loading…",
+    "search": "Search"
+  },
+  "books": {
+    "total": "{count, plural, one {# book} other {# books}}",
+    "noResults": "No matching books.",
+    "openReader": "Open in reader",
+    "editMetadata": "Edit metadata"
+  }
+}
