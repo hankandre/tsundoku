@@ -19,12 +19,31 @@ import { resolveBookFile } from "../services/files.ts";
  */
 
 const MAX_BYTES = 512 * 1024 * 1024; // 512 MiB
+const PERMISSION_COLUMNS = {
+  upload: schema.userPermissions.upload,
+  manipulateLibrary: schema.userPermissions.manipulateLibrary,
+} as const;
 
 const FileIdParam = sValidator(
   "param",
   // Reuse IdParam by name reads as confusing here; alias for clarity.
   IdParam,
 );
+
+async function hasPermission(
+  user: { id: string; isAdmin: boolean; permissions: string[] },
+  permission: keyof typeof PERMISSION_COLUMNS,
+): Promise<boolean> {
+  if (user.isAdmin || user.permissions.includes(permission)) return true;
+
+  const db = requireDb();
+  const rows = await db
+    .select({ allowed: PERMISSION_COLUMNS[permission] })
+    .from(schema.userPermissions)
+    .where(eq(schema.userPermissions.userId, user.id))
+    .limit(1);
+  return Boolean(rows[0]?.allowed);
+}
 
 export const additionalFileRoutes = new Hono()
   .use("*", authRequired)
@@ -47,7 +66,7 @@ export const additionalFileRoutes = new Hono()
     }),
     async (c) => {
       const u = c.var.user!;
-      if (!u.isAdmin && !u.permissions.includes("upload")) {
+      if (!(await hasPermission(u, "upload"))) {
         throw new HTTPException(403, { message: "Upload not permitted" });
       }
       const { id } = c.req.valid("param");
@@ -120,7 +139,7 @@ export const additionalFileRoutes = new Hono()
     sValidator("param", IdParam),
     async (c) => {
       const u = c.var.user!;
-      if (!u.isAdmin && !u.permissions.includes("manipulateLibrary")) {
+      if (!(await hasPermission(u, "manipulateLibrary"))) {
         throw new HTTPException(403, { message: "Delete not permitted" });
       }
       const { id } = c.req.valid("param");

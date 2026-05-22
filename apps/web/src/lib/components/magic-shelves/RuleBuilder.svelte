@@ -11,6 +11,7 @@
     OPERATOR_LABELS,
     fieldMeta,
     isLeaf,
+    type FieldMeta,
     type FieldName,
     type GroupRule,
     type LeafRule,
@@ -28,6 +29,8 @@
   // Foundation scope: the builder is flat — only leaf rules under the top
   // group. Nested groups can come later; the JSON shape already supports them.
   const leaves = $derived(rules.rules.filter(isLeaf));
+
+  type ValueMode = "none" | "single" | "range" | "list";
 
   function setJoin(j: "and" | "or") {
     rules = { ...rules, join: j };
@@ -79,11 +82,62 @@
     return meta ? OPERATORS_BY_KIND[meta.kind] : [];
   }
 
-  function operatorNeedsValue(op: OperatorName): "none" | "single" | "range" | "list" {
+  function operatorNeedsValue(op: OperatorName): ValueMode {
     if (op === "is_empty" || op === "is_not_empty") return "none";
     if (op === "in_between") return "range";
     if (op === "includes_any" || op === "includes_all" || op === "excludes_all") return "list";
     return "single";
+  }
+
+  function joinLabel(join: "and" | "or"): string {
+    if (join === "and") return "all";
+    return "any";
+  }
+
+  function joinButtonClass(join: "and" | "or"): string {
+    if (rules.join === join) return "bg-primary text-primary-foreground";
+    return "text-muted-foreground hover:bg-muted hover:text-foreground";
+  }
+
+  function enumLabel(meta: FieldMeta | undefined, value: unknown): string {
+    const selectedValue = String(value ?? "");
+    return meta?.options?.find((option) => option.value === selectedValue)?.label ?? "—";
+  }
+
+  function scalarInputType(meta: FieldMeta | undefined): "date" | "number" {
+    if (meta?.kind === "date") return "date";
+    return "number";
+  }
+
+  function singleValueDisplay(rule: LeafRule): string {
+    if (rule.value == null) return "";
+    return String(rule.value);
+  }
+
+  function parseNumericInput(raw: string): number | null {
+    if (raw === "") return null;
+    return Number(raw);
+  }
+
+  function parseScalarInput(meta: FieldMeta | undefined, raw: string): string | number | null {
+    if (meta?.kind === "date") return raw;
+    return parseNumericInput(raw);
+  }
+
+  function updateSingleInput(index: number, meta: FieldMeta | undefined, raw: string) {
+    if (meta?.kind === "number") {
+      updateRule(index, { value: parseNumericInput(raw) });
+      return;
+    }
+    updateRule(index, { value: raw });
+  }
+
+  function updateRangeStart(index: number, meta: FieldMeta | undefined, raw: string) {
+    updateRule(index, { valueStart: parseScalarInput(meta, raw) });
+  }
+
+  function updateRangeEnd(index: number, meta: FieldMeta | undefined, raw: string) {
+    updateRule(index, { valueEnd: parseScalarInput(meta, raw) });
   }
 
   // Comma-separated list values get split client-side so the evaluator gets
@@ -119,14 +173,12 @@
             type="button"
             class={cn(
               "px-3 text-[10px] font-medium uppercase tracking-[0.16em] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-              rules.join === j
-                ? "bg-primary text-primary-foreground"
-                : "text-muted-foreground hover:bg-muted hover:text-foreground",
+              joinButtonClass(j),
             )}
             onclick={() => setJoin(j)}
             aria-pressed={rules.join === j}
           >
-            {j === "and" ? "all" : "any"}
+            {joinLabel(j)}
           </button>
         {/each}
       </div>
@@ -198,27 +250,25 @@
           {:else if valueMode === "range"}
             <div class="flex items-center gap-2">
               <Input
-                type={meta?.kind === "date" ? "date" : "number"}
+                type={scalarInputType(meta)}
                 step="any"
                 class="h-8 flex-1 text-xs"
                 value={rule.valueStart == null ? "" : String(rule.valueStart)}
                 oninput={(e) => {
                   const raw = (e.currentTarget as HTMLInputElement).value;
-                  const v = meta?.kind === "date" ? raw : raw === "" ? null : Number(raw);
-                  updateRule(i, { valueStart: v });
+                  updateRangeStart(i, meta, raw);
                 }}
                 aria-label="From"
               />
               <span class="font-mono text-xs text-muted-foreground">to</span>
               <Input
-                type={meta?.kind === "date" ? "date" : "number"}
+                type={scalarInputType(meta)}
                 step="any"
                 class="h-8 flex-1 text-xs"
                 value={rule.valueEnd == null ? "" : String(rule.valueEnd)}
                 oninput={(e) => {
                   const raw = (e.currentTarget as HTMLInputElement).value;
-                  const v = meta?.kind === "date" ? raw : raw === "" ? null : Number(raw);
-                  updateRule(i, { valueEnd: v });
+                  updateRangeEnd(i, meta, raw);
                 }}
                 aria-label="To"
               />
@@ -239,7 +289,7 @@
               onValueChange={(v) => v != null && updateRule(i, { value: v })}
             >
               <Select.Trigger class="h-8 w-full text-xs">
-                {meta.options?.find((o) => o.value === String(rule.value ?? ""))?.label ?? "—"}
+                {enumLabel(meta, rule.value)}
               </Select.Trigger>
               <Select.Content>
                 {#each meta.options ?? [] as opt (opt.value)}
@@ -252,10 +302,10 @@
               type="number"
               step="any"
               class="h-8 text-xs"
-              value={rule.value == null ? "" : String(rule.value)}
+              value={singleValueDisplay(rule)}
               oninput={(e) => {
                 const raw = (e.currentTarget as HTMLInputElement).value;
-                updateRule(i, { value: raw === "" ? null : Number(raw) });
+                updateSingleInput(i, meta, raw);
               }}
               aria-label="Value"
             />
@@ -271,7 +321,7 @@
             <Input
               type="text"
               class="h-8 text-xs"
-              value={rule.value == null ? "" : String(rule.value)}
+              value={singleValueDisplay(rule)}
               oninput={(e) => updateRule(i, { value: (e.currentTarget as HTMLInputElement).value })}
               aria-label="Value"
             />

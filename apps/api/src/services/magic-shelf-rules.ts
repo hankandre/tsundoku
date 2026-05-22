@@ -104,6 +104,13 @@ type FieldSpec =
   | { kind: "uuid"; col: SQL.Aliased | SQL | unknown }
   | { kind: "collection"; collection: "authors" | "categories" };
 
+type ScalarFieldSpec = Exclude<FieldSpec, { kind: "collection" }>;
+type CollectionTables = {
+  mapping: string;
+  fkCol: string;
+  nameTable: string;
+};
+
 // Column references are passed straight to `sql` template strings — Drizzle
 // inlines them with the right quoting / table aliasing.
 const FIELDS: Record<FieldName, FieldSpec> = {
@@ -129,6 +136,19 @@ const FIELDS: Record<FieldName, FieldSpec> = {
   libraryId: { kind: "uuid", col: schema.books.libraryId },
   authors: { kind: "collection", collection: "authors" },
   categories: { kind: "collection", collection: "categories" },
+};
+
+const COLLECTION_TABLES: Record<Extract<FieldSpec, { kind: "collection" }>["collection"], CollectionTables> = {
+  authors: {
+    mapping: "book_metadata_author_mapping",
+    fkCol: "author_id",
+    nameTable: "authors",
+  },
+  categories: {
+    mapping: "book_metadata_category_mapping",
+    fkCol: "category_id",
+    nameTable: "categories",
+  },
 };
 
 type Rule = MagicShelfRulesInput["rules"][number];
@@ -179,38 +199,15 @@ function compileOperator(spec: FieldSpec, op: OperatorName, rule: Extract<Rule, 
   const col = spec.col as SQL;
   const value = rule.value;
 
-  switch (op) {
-    case "is_empty":
-      return spec.kind === "string"
-        ? sql`(${col} IS NULL OR ${col} = '')`
-        : sql`${col} IS NULL`;
-    case "is_not_empty":
-      return spec.kind === "string"
-        ? sql`(${col} IS NOT NULL AND ${col} <> '')`
-        : sql`${col} IS NOT NULL`;
-  }
+  if (op === "is_empty") return compileEmptyCheck(spec, col);
+  if (op === "is_not_empty") return compilePresentCheck(spec, col);
 
-  if (op === "includes_any" || op === "excludes_all") {
-    if (spec.kind !== "enum" && spec.kind !== "uuid") {
-      // includes_any on a scalar string/number field reduces to equals-any.
-      const list = asArray(value);
-      if (!list.length) return sql`true`;
-      const fragment = sql`${col} IN (${sql.join(list.map((v) => sql`${v}`), sql.raw(","))})`;
-      return op === "excludes_all" ? sql`(${col} IS NULL OR NOT (${fragment}))` : fragment;
-    }
-    const list = asArray(value).map((v) => String(v));
-    if (!list.length) return sql`true`;
-    const fragment = sql`${col} IN (${sql.join(list.map((v) => sql`${v}`), sql.raw(","))})`;
-    return op === "excludes_all" ? sql`(${col} IS NULL OR NOT (${fragment}))` : fragment;
-  }
+  if (isAnyMembershipOperator(op)) return compileAnyMembership(spec, col, op, value);
 
   if (op === "includes_all") {
     // includes_all on a scalar field is only satisfiable if exactly one value
     // is given — degenerate, but keep the door open so the UI can be uniform.
-    const list = asArray(value);
-    if (list.length === 0) return sql`true`;
-    if (list.length === 1) return sql`${col} = ${list[0]}`;
-    return sql`false`;
+    return compileScalarIncludesAll(col, asArray(value));
   }
 
   if (spec.kind === "string") return compileStringOperator(col, op, value);
@@ -223,6 +220,47 @@ function compileOperator(spec: FieldSpec, op: OperatorName, rule: Extract<Rule, 
     return sql`true`;
   }
   return sql`true`;
+}
+
+function compileEmptyCheck(spec: ScalarFieldSpec, col: SQL): SQL {
+  if (spec.kind === "string") return sql`(${col} IS NULL OR ${col} = '')`;
+  return sql`${col} IS NULL`;
+}
+
+function compilePresentCheck(spec: ScalarFieldSpec, col: SQL): SQL {
+  if (spec.kind === "string") return sql`(${col} IS NOT NULL AND ${col} <> '')`;
+  return sql`${col} IS NOT NULL`;
+}
+
+function isAnyMembershipOperator(op: OperatorName): op is "includes_any" | "excludes_all" {
+  return op === "includes_any" || op === "excludes_all";
+}
+
+function compileAnyMembership(
+  spec: ScalarFieldSpec,
+  col: SQL,
+  op: "includes_any" | "excludes_all",
+  value: unknown,
+): SQL {
+  // includes_any on a scalar string/number field reduces to equals-any.
+  const list = normalizeMembershipValues(spec, value);
+  if (!list.length) return sql`true`;
+
+  const fragment = sql`${col} IN (${sql.join(list.map((v) => sql`${v}`), sql.raw(","))})`;
+  if (op === "excludes_all") return sql`(${col} IS NULL OR NOT (${fragment}))`;
+  return fragment;
+}
+
+function normalizeMembershipValues(spec: ScalarFieldSpec, value: unknown): unknown[] {
+  const list = asArray(value);
+  if (spec.kind === "enum" || spec.kind === "uuid") return list.map((v) => String(v));
+  return list;
+}
+
+function compileScalarIncludesAll(col: SQL, list: unknown[]): SQL {
+  if (list.length === 0) return sql`true`;
+  if (list.length === 1) return sql`${col} = ${list[0]}`;
+  return sql`false`;
 }
 
 function compileStringOperator(col: SQL, op: OperatorName, value: unknown): SQL {
@@ -279,77 +317,74 @@ function compileCollectionOperator(
   // authors / categories live in mapping tables joined to a name table. The
   // EXISTS form is cheaper than a JOIN at this scope because the outer query
   // already pages rows and we want one boolean per outer row.
-  const mapping =
-    spec.collection === "authors" ? "book_metadata_author_mapping" : "book_metadata_category_mapping";
-  const fkCol = spec.collection === "authors" ? "author_id" : "category_id";
-  const nameTable = spec.collection === "authors" ? "authors" : "categories";
-
+  const tables = COLLECTION_TABLES[spec.collection];
   const values = asArray(rule.value).map((v) => String(v));
 
   switch (op) {
     case "is_empty":
-      return sql.raw(
-        `NOT EXISTS (SELECT 1 FROM ${mapping} m WHERE m.book_id = books.id)`,
-      );
+      return sql`NOT (${collectionHasAny(tables)})`;
     case "is_not_empty":
-      return sql.raw(
-        `EXISTS (SELECT 1 FROM ${mapping} m WHERE m.book_id = books.id)`,
-      );
+      return collectionHasAny(tables);
     case "contains":
     case "equals": {
       if (!rule.value) return sql`true`;
-      const s = String(rule.value);
-      const matchCol = op === "contains" ? sql`n.name ILIKE ${"%" + escapeLike(s) + "%"}` : sql`n.name = ${s}`;
-      return sql`EXISTS (
-        SELECT 1 FROM ${sql.raw(mapping)} m
-        JOIN ${sql.raw(nameTable)} n ON n.id = m.${sql.raw(fkCol)}
-        WHERE m.book_id = ${schema.books.id} AND ${matchCol}
-      )`;
+      const matchCol = collectionNamePredicate(op, String(rule.value));
+      return collectionHasMatchingName(tables, matchCol);
     }
     case "does_not_contain":
     case "not_equals": {
       if (!rule.value) return sql`true`;
-      const s = String(rule.value);
-      const matchCol = op === "does_not_contain" ? sql`n.name ILIKE ${"%" + escapeLike(s) + "%"}` : sql`n.name = ${s}`;
-      return sql`NOT EXISTS (
-        SELECT 1 FROM ${sql.raw(mapping)} m
-        JOIN ${sql.raw(nameTable)} n ON n.id = m.${sql.raw(fkCol)}
-        WHERE m.book_id = ${schema.books.id} AND ${matchCol}
-      )`;
+      const matchCol = collectionNamePredicate(op, String(rule.value));
+      return sql`NOT (${collectionHasMatchingName(tables, matchCol)})`;
     }
     case "includes_any": {
       if (!values.length) return sql`true`;
-      return sql`EXISTS (
-        SELECT 1 FROM ${sql.raw(mapping)} m
-        JOIN ${sql.raw(nameTable)} n ON n.id = m.${sql.raw(fkCol)}
-        WHERE m.book_id = ${schema.books.id} AND n.name IN (${sql.join(values.map((v) => sql`${v}`), sql.raw(","))})
-      )`;
+      return collectionHasMatchingName(tables, nameIn(values));
     }
     case "excludes_all": {
       if (!values.length) return sql`true`;
-      return sql`NOT EXISTS (
-        SELECT 1 FROM ${sql.raw(mapping)} m
-        JOIN ${sql.raw(nameTable)} n ON n.id = m.${sql.raw(fkCol)}
-        WHERE m.book_id = ${schema.books.id} AND n.name IN (${sql.join(values.map((v) => sql`${v}`), sql.raw(","))})
-      )`;
+      return sql`NOT (${collectionHasMatchingName(tables, nameIn(values))})`;
     }
     case "includes_all": {
       if (!values.length) return sql`true`;
       // Each required value must exist on its own row in the mapping. Compose
       // one EXISTS per required value and AND them together.
-      const exists = values.map(
-        (v) => sql`EXISTS (
-          SELECT 1 FROM ${sql.raw(mapping)} m
-          JOIN ${sql.raw(nameTable)} n ON n.id = m.${sql.raw(fkCol)}
-          WHERE m.book_id = ${schema.books.id} AND n.name = ${v}
-        )`,
-      );
+      const exists = values.map((v) => collectionHasMatchingName(tables, sql`n.name = ${v}`));
       return sql`(${sql.join(exists, sql.raw(" AND "))})`;
     }
     default:
       logger.warn({ operator: op }, "magic-shelf: collection operator unsupported, skipping");
       return sql`true`;
   }
+}
+
+function collectionHasAny(tables: CollectionTables): SQL {
+  return sql`EXISTS (
+    SELECT 1 FROM ${sql.raw(tables.mapping)} m
+    WHERE m.book_id = ${schema.books.id}
+  )`;
+}
+
+function collectionHasMatchingName(tables: CollectionTables, matchCol: SQL): SQL {
+  return sql`EXISTS (
+    SELECT 1 FROM ${sql.raw(tables.mapping)} m
+    JOIN ${sql.raw(tables.nameTable)} n ON n.id = m.${sql.raw(tables.fkCol)}
+    WHERE m.book_id = ${schema.books.id} AND ${matchCol}
+  )`;
+}
+
+function collectionNamePredicate(
+  op: "contains" | "equals" | "does_not_contain" | "not_equals",
+  value: string,
+): SQL {
+  if (op === "contains" || op === "does_not_contain") {
+    return sql`n.name ILIKE ${"%" + escapeLike(value) + "%"}`;
+  }
+  return sql`n.name = ${value}`;
+}
+
+function nameIn(values: string[]): SQL {
+  return sql`n.name IN (${sql.join(values.map((v) => sql`${v}`), sql.raw(","))})`;
 }
 
 function asArray(value: unknown): unknown[] {
