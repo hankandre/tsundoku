@@ -43,7 +43,16 @@ export async function issueTokens(input: {
     .setSubject(String(input.userId))
     .sign(secret());
 
-  const refreshToken = await new SignJWT({ ...(base as TokenClaims), type: "refresh" })
+  // HS256 is deterministic — without a per-issue nonce, two logins for the
+  // same user within one second produce byte-identical tokens and collide on
+  // the `uq_refresh_tokens_token` unique index. `jti` is the standard JWT
+  // claim for this (RFC 7519 §4.1.7).
+  const refreshPayload: TokenClaims = {
+    ...(base as TokenClaims),
+    type: "refresh",
+    jti: crypto.randomUUID(),
+  };
+  const refreshToken = await new SignJWT(refreshPayload)
     .setProtectedHeader({ alg: "HS256" })
     .setIssuedAt(now)
     .setExpirationTime(now + REFRESH_TTL_SECONDS)

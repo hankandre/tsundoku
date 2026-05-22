@@ -1,6 +1,23 @@
-import { and, eq, inArray } from "drizzle-orm";
+import { and, eq, getTableColumns, inArray } from "drizzle-orm";
 import { schema } from "@tsundoku/db";
 import { requireDb } from "../db.ts";
+
+const BOOK_METADATA_COLUMNS = new Set(Object.keys(getTableColumns(schema.bookMetadata)));
+
+// Keep only keys that correspond to real columns on book_metadata. Belt-and-
+// braces against (a) schema drift, (b) any upstream validator that lets
+// unknown keys through. Without this, Drizzle silently drops unknown keys and
+// can emit `UPDATE … SET  WHERE …` with no SET clause — a Postgres syntax
+// error that surfaces as a 500.
+function pickKnownColumns<T extends Record<string, unknown>>(input: T): Partial<T> {
+  const out: Partial<T> = {};
+  for (const key of Object.keys(input) as Array<keyof T>) {
+    if (BOOK_METADATA_COLUMNS.has(key as string)) {
+      out[key] = input[key];
+    }
+  }
+  return out;
+}
 
 export type MetadataUpdate = {
   title?: string | null;
@@ -69,7 +86,9 @@ async function upsertCategories(names: string[]): Promise<string[]> {
 
 export async function updateBookMetadata(bookId: string, patch: MetadataUpdate): Promise<void> {
   const db = requireDb();
-  const { authors, categories, ...scalar } = patch;
+  const { authors, categories, ...rest } = patch;
+  const scalar = pickKnownColumns(rest);
+  const hasScalar = Object.keys(scalar).length > 0;
 
   // Upsert the row (book_metadata.bookId is the PK).
   const existing = await db
@@ -80,13 +99,11 @@ export async function updateBookMetadata(bookId: string, patch: MetadataUpdate):
 
   if (existing.length === 0) {
     await db.insert(schema.bookMetadata).values({ bookId, ...scalar });
-  } else {
-    if (Object.keys(scalar).length > 0) {
-      await db
-        .update(schema.bookMetadata)
-        .set(scalar)
-        .where(eq(schema.bookMetadata.bookId, bookId));
-    }
+  } else if (hasScalar) {
+    await db
+      .update(schema.bookMetadata)
+      .set(scalar)
+      .where(eq(schema.bookMetadata.bookId, bookId));
   }
 
   if (authors) {

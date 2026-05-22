@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, inArray, sql, type SQL } from "drizzle-orm";
+import { and, eq, inArray, sql, type AnyColumn, type SQL } from "drizzle-orm";
 import { schema } from "@tsundoku/db";
 import { requireDb } from "../db.ts";
 import {
@@ -6,6 +6,23 @@ import {
   contentRestrictionFilter,
 } from "./content-restriction.ts";
 import { compileMagicShelfWhere, type MagicShelfRulesInput } from "./magic-shelf-rules.ts";
+
+const SORT_COLUMNS = {
+  addedOn: schema.books.addedOn,
+  title: schema.bookMetadata.title,
+  rating: schema.bookMetadata.rating,
+  pageCount: schema.bookMetadata.pageCount,
+} as const satisfies Record<NonNullable<BookQuery["sort"]>, AnyColumn>;
+
+// Postgres defaults to NULLS FIRST on DESC and NULLS LAST on ASC. For sortable
+// columns like `rating` / `pageCount` that's the opposite of what users want
+// ("top rated" should not be dominated by books with no rating), so we pin
+// NULLS LAST in both directions.
+function buildOrderBy(sort: BookQuery["sort"], direction: BookQuery["direction"]): SQL {
+  const column = SORT_COLUMNS[sort ?? "addedOn"];
+  const dir = direction === "asc" ? sql.raw("asc") : sql.raw("desc");
+  return sql`${column} ${dir} nulls last`;
+}
 
 export type BookListItem = {
   id: string;
@@ -112,15 +129,7 @@ export async function listBooks(
   }
   const whereExpr = conds.length === 0 ? undefined : and(...conds);
 
-  const orderCol =
-    q.sort === "title"
-      ? schema.bookMetadata.title
-      : q.sort === "rating"
-        ? schema.bookMetadata.rating
-        : q.sort === "pageCount"
-          ? schema.bookMetadata.pageCount
-          : schema.books.addedOn;
-  const orderExpr = (q.direction ?? "desc") === "asc" ? asc(orderCol) : desc(orderCol);
+  const orderExpr = buildOrderBy(q.sort, q.direction);
 
   const baseSelect = db
     .select({
