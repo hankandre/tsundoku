@@ -57,16 +57,16 @@ export const app = new Hono()
   .route("/api/v1", healthRoutes)
   .route("/api/v1", authRoutes)
   .route("/api/v1", oidcRoutes)
-  // publicRoutes must be mounted before any sub-app that does
-  // `.use("*", authRequired)`. In Hono, sub-app wildcard middleware applies to
-  // every handler registered after it on the parent — so anything mounted
-  // after libraryRoutes inherits authRequired against its will.
+  // Mount order matters: in Hono, a sub-app's `.use("*", mw)` applies to every
+  // handler registered AFTER it on the parent. Sub-apps that gate their whole
+  // surface (`libraryRoutes`, `bookRoutes`, `shelfRoutes`, `adminRoutes`) leak
+  // that middleware onto siblings mounted later. Keep open routes first, then
+  // user-scoped routes, then admin-scoped routes last.
   .route("/api/v1", publicRoutes)
   .route("/api/v1", libraryRoutes)
   .route("/api/v1", bookRoutes)
   .route("/api/v1", shelfRoutes)
   .route("/api/v1", metadataRoutes)
-  .route("/api/v1", adminRoutes)
   .route("/api/v1", readerRoutes)
   .route("/api/v1", statsRoutes)
   .route("/api/v1", scanRoutes)
@@ -86,7 +86,6 @@ export const app = new Hono()
   .route("/api/v1", audiobookRoutes)
   .route("/api/v1", annotationRoutes)
   .route("/api/v1", reviewRoutes)
-  .route("/api/v1", oidcGroupRoutes)
   .route("/api/v1", iconRoutes)
   .route("/api/v1", sidecarRoutes)
   .route("/api/v1", deviceUserRoutes)
@@ -94,6 +93,11 @@ export const app = new Hono()
   .route("/api/v1", komgaRoutes)
   .route("/api/v1", additionalFileRoutes)
   .route("/api/v1", fsRoutes)
+  // Admin-gated sub-apps use `.use("*", authRequired, adminRequired)` and
+  // MUST be mounted last — otherwise every sub-app registered after them
+  // inherits adminRequired and silently 403s for non-admin users.
+  .route("/api/v1", oidcGroupRoutes)
+  .route("/api/v1", adminRoutes)
   .onError((err, c) => {
     if (err instanceof HTTPException) {
       return err.getResponse();

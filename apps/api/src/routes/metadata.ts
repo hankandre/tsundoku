@@ -24,7 +24,9 @@ import {
   listSessions,
 } from "../services/progress.ts";
 
-// Arktype is strict by default — excess keys are rejected without a modifier.
+// `.onUndeclaredKey("reject")` makes arktype refuse payloads that contain
+// fields outside this schema — without it, unknown keys are silently passed
+// through and downstream Drizzle would emit invalid SQL on an empty SET.
 const MetadataPatch = type({
   "title?": "string | null",
   "subtitle?": "string | null",
@@ -45,7 +47,7 @@ const MetadataPatch = type({
   "titleLocked?": "boolean",
   "descriptionLocked?": "boolean",
   "authorsLocked?": "boolean",
-});
+}).onUndeclaredKey("reject");
 
 // Arktype validators — these flow through @hono/standard-validator the same
 // as zod ones because both implement Standard Schema v1. The shorthand is
